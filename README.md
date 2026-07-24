@@ -29,15 +29,15 @@
 
 ## Структура
 - `UnityProject/` — чистый Unity-проект, открывать через Unity Hub именно эту
-  папку (скрипты в `UnityProject/Assets/Scripts`, генератор сцены в
-  `UnityProject/Assets/Editor/SceneSetup.cs`).
+  папку (скрипты в `UnityProject/Assets/LadyBug/Scripts`, генератор сцены в
+  `UnityProject/Assets/LadyBug/Editor/SceneSetup.cs`).
 - `RawAssets/` — сырые исходники арта (кадры из `.swf`, скачанные картинки) до
-  конвертации в спрайты в `UnityProject/Assets/Sprites`.
+  конвертации в спрайты в `UnityProject/Assets/LadyBug/Sprites`.
 - `docs/` — вся документация проекта.
 
 ## Быстрый старт
-Открыть `UnityProject/` в Unity Hub (Unity 6000.0.78f1), затем **Tools →
-Rebuild Scene** — соберёт `Assets/Scenes/Main.unity` с нуля из кода (сцена
+Открыть `UnityProject/` в Unity Hub (Unity 6000.5.3f1), затем **Tools →
+Rebuild Scene** — соберёт `Assets/LadyBug/Scenes/Main.unity` с нуля из кода (сцена
 не хранится вручную). После изменений в `SceneSetup.cs` — повторить Rebuild
-Scene; после изменений только в `Assets/Scripts/*.cs` — Unity подхватывает
+Scene; после изменений только в `Assets/LadyBug/Scripts/*.cs` — Unity подхватывает
 сама, пересборка сцены не нужна.
