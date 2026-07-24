@@ -3,6 +3,22 @@
 Локальный кооперативный (1–2 игрока) endless-runner про божью коровку на
 трёхполосной дороге.
 
+## Требования
+- Unity **6000.5.3f1**.
+- Рендер: **URP (2D Renderer)** — пайплайн настроен в проекте
+  (`Assets/LadyBug/Rendering/LadyBug_URP.asset` назначен в Graphics и во всех
+  Quality-уровнях); Built-in больше не используется.
+
+## Как запустить
+1. Открыть `UnityProject/` в Unity Hub (Unity **6000.5.3f1**), именно эту
+   папку, не корень репозитория.
+2. Entry-сцена — `Assets/LadyBug/Scenes/Main.unity` (уже в Build Settings).
+   Весь контент игры собран в одну папку `Assets/LadyBug/` (Scripts со своим
+   asmdef `LadyBug.Runtime`, Scenes, Prefabs, Materials, Audio, Sprites,
+   Editor, Rendering).
+3. Play. При необходимости пересобрать сцену из кода — **Tools → Rebuild
+   Scene** (генератор `Assets/LadyBug/Editor/SceneSetup.cs`).
+
 ## Документация
 - [docs/technical-details.md](docs/technical-details.md) — технические детали для
   ИИ-агентов: **как подключиться к проекту агентом** (MCP и запасной вариант
