@@ -71,8 +71,8 @@ public static class SceneSetup
         CreateIntroScreen();
         CreateScreenInfoLabel();
 
-        System.IO.Directory.CreateDirectory("Assets/Scenes");
-        string scenePath = "Assets/Scenes/Main.unity";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Scenes");
+        string scenePath = "Assets/LadyBug/Scenes/Main.unity";
         EditorSceneManager.SaveScene(scene, scenePath);
 
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
@@ -308,10 +308,10 @@ public static class SceneSetup
             // Cycle order alternates a "tucked" pose with a "wide" one
             // instead of the raw generation order, so it reads as an actual
             // stride rather than 2 poses each held twice as long.
-            Texture2D frame1Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile);
-            Texture2D frame2Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile.Replace(".png", "Frame2.png"));
-            Texture2D frame3Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile.Replace(".png", "Frame3.png"));
-            Texture2D frame4Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile.Replace(".png", "Frame4.png"));
+            Texture2D frame1Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile);
+            Texture2D frame2Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile.Replace(".png", "Frame2.png"));
+            Texture2D frame3Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile.Replace(".png", "Frame3.png"));
+            Texture2D frame4Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile.Replace(".png", "Frame4.png"));
 
             var groundFrames = new System.Collections.Generic.List<Texture2D> { frame1Tex, frame3Tex, frame2Tex, frame4Tex };
             groundFrames.RemoveAll(t => t == null);
@@ -323,8 +323,8 @@ public static class SceneSetup
 
             // Airborne cycle — wings-open frames, same "FrameN" edit-of-frame1
             // convention but under an "AirN" suffix instead.
-            Texture2D air1Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile.Replace(".png", "Air1.png"));
-            Texture2D air2Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile.Replace(".png", "Air2.png"));
+            Texture2D air1Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile.Replace(".png", "Air1.png"));
+            Texture2D air2Tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile.Replace(".png", "Air2.png"));
 
             var airFrames = new System.Collections.Generic.List<Texture2D> { air1Tex, air2Tex };
             airFrames.RemoveAll(t => t == null);
@@ -370,7 +370,7 @@ public static class SceneSetup
 
     static Transform CreatePlayerSprite(Transform parent, Color tint, string spriteFile)
     {
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile);
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile);
         if (tex == null)
         {
             Debug.LogWarning("LadyBug sprite not found at Assets/Sprites/" + spriteFile);
@@ -594,7 +594,7 @@ public static class SceneSetup
 
     static void CreateSpawner()
     {
-        System.IO.Directory.CreateDirectory("Assets/Prefabs");
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Prefabs");
 
         // Three separate pools so the spawner can pick in two steps:
         // good vs. bad, then — only for bad — jump-over vs. duck-under.
@@ -606,7 +606,7 @@ public static class SceneSetup
             bool canWander = System.Array.IndexOf(WanderingAnimals, name) >= 0;
             float? widthOverride = LaneObjectWidthOverrides.TryGetValue(name, out float overrideWidth) ? overrideWidth : (float?)null;
             float? colliderHeightOverride = LaneObjectColliderHeightOverrides.TryGetValue(name, out float overrideColliderHeight) ? overrideColliderHeight : (float?)null;
-            GameObject prefab = CreateEntityPrefab(name, "Assets/Sprites/" + file, height, "Assets/Prefabs/" + name + ".prefab", score, canWander, widthOverride, colliderHeightOverride);
+            GameObject prefab = CreateEntityPrefab(name, "Assets/LadyBug/Sprites/" + file, height, "Assets/LadyBug/Prefabs/" + name + ".prefab", score, canWander, widthOverride, colliderHeightOverride);
             if (prefab == null)
                 continue;
             (score > 0 ? goodPrefabs : badJumpPrefabs).Add(prefab);
@@ -651,12 +651,12 @@ public static class SceneSetup
 
     static void CreateSideScenery()
     {
-        System.IO.Directory.CreateDirectory("Assets/Prefabs");
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Prefabs");
 
         var prefabs = new System.Collections.Generic.List<GameObject>();
         foreach (var (name, file, height) in SceneryObjects)
         {
-            GameObject prefab = CreateEntityPrefab(name, "Assets/Sprites/" + file, height, "Assets/Prefabs/" + name + ".prefab");
+            GameObject prefab = CreateEntityPrefab(name, "Assets/LadyBug/Sprites/" + file, height, "Assets/LadyBug/Prefabs/" + name + ".prefab");
             if (prefab != null)
                 prefabs.Add(prefab);
         }
@@ -695,12 +695,12 @@ public static class SceneSetup
 
     static void CreateSky()
     {
-        System.IO.Directory.CreateDirectory("Assets/Prefabs");
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Prefabs");
 
         var prefabs = new System.Collections.Generic.List<GameObject>();
         foreach (var (name, file, height) in CloudSprites)
         {
-            GameObject prefab = CreateCloudPrefab(name, "Assets/Sprites/" + file, height);
+            GameObject prefab = CreateCloudPrefab(name, "Assets/LadyBug/Sprites/" + file, height);
             if (prefab != null)
                 prefabs.Add(prefab);
         }
@@ -739,13 +739,13 @@ public static class SceneSetup
         Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/" + name + ".mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/" + name + ".mat";
         AssetDatabase.DeleteAsset(materialPath); // safe to rerun Rebuild Scene
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
 
-        string savePath = "Assets/Prefabs/" + name + ".prefab";
+        string savePath = "Assets/LadyBug/Prefabs/" + name + ".prefab";
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
         Object.DestroyImmediate(root);
         return prefab;
@@ -753,7 +753,7 @@ public static class SceneSetup
 
     static void CreateSunSprite()
     {
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Sun.png");
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Sun.png");
         if (tex == null)
         {
             Debug.LogWarning("Texture not found: Assets/Sprites/Sun.png");
@@ -796,21 +796,21 @@ public static class SceneSetup
         SfxManager sfx = audioGo.AddComponent<SfxManager>();
         SerializedObject sfxSo = new SerializedObject(sfx);
         sfxSo.FindProperty("source").objectReferenceValue = sfxSource;
-        sfxSo.FindProperty("pickupClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/PickupPositive.mp3");
-        sfxSo.FindProperty("dogClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/BadDog.mp3");
-        sfxSo.FindProperty("catClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/BadCat.mp3");
-        sfxSo.FindProperty("crowClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/BadCrow.mp3");
-        sfxSo.FindProperty("snakeClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/SnakeHiss.mp3");
-        sfxSo.FindProperty("hitGenericClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/HitGeneric.mp3");
-        sfxSo.FindProperty("trickClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/TrickApplause.mp3");
+        sfxSo.FindProperty("pickupClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/PickupPositive.mp3");
+        sfxSo.FindProperty("dogClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/BadDog.mp3");
+        sfxSo.FindProperty("catClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/BadCat.mp3");
+        sfxSo.FindProperty("crowClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/BadCrow.mp3");
+        sfxSo.FindProperty("snakeClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/SnakeHiss.mp3");
+        sfxSo.FindProperty("hitGenericClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/HitGeneric.mp3");
+        sfxSo.FindProperty("trickClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/TrickApplause.mp3");
         sfxSo.ApplyModifiedPropertiesWithoutUndo();
 
         AudioSource shiftSource = audioGo.AddComponent<AudioSource>();
-        shiftSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/GearShift.wav");
+        shiftSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/GearShift.wav");
         shiftSource.playOnAwake = false;
 
         AudioSource humSource = audioGo.AddComponent<AudioSource>();
-        humSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/EngineHum.mp3");
+        humSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/EngineHum.mp3");
         humSource.loop = true;
         humSource.playOnAwake = false;
 
@@ -828,13 +828,13 @@ public static class SceneSetup
     static void CreatePlayerMovementSfx(GameObject player, PlayerController controller)
     {
         AudioSource feetSource = player.AddComponent<AudioSource>();
-        feetSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/RunFeet.mp3");
+        feetSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/RunFeet.mp3");
         feetSource.loop = true;
         feetSource.playOnAwake = true;
         feetSource.volume = 0f;
 
         AudioSource wingsSource = player.AddComponent<AudioSource>();
-        wingsSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Buzz.wav");
+        wingsSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/Buzz.wav");
         wingsSource.loop = true;
         wingsSource.playOnAwake = true;
         wingsSource.volume = 0f;
@@ -856,8 +856,8 @@ public static class SceneSetup
     // not one texture into a plain material.
     static GameObject CreateSnakePrefab()
     {
-        Texture2D idleTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/SnakeCobra.png");
-        Texture2D movingTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/SnakeSlither.png");
+        Texture2D idleTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/SnakeCobra.png");
+        Texture2D movingTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/SnakeSlither.png");
         if (idleTex == null || movingTex == null)
         {
             Debug.LogWarning("Snake textures not found in Assets/Sprites/");
@@ -902,8 +902,8 @@ public static class SceneSetup
         Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = idleTex };
 
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/" + name + ".mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/" + name + ".mat";
         AssetDatabase.DeleteAsset(materialPath);
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
@@ -917,7 +917,7 @@ public static class SceneSetup
         poseSo.FindProperty("height").floatValue = height;
         poseSo.ApplyModifiedPropertiesWithoutUndo();
 
-        string savePath = "Assets/Prefabs/Snake.prefab";
+        string savePath = "Assets/LadyBug/Prefabs/Snake.prefab";
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
         Object.DestroyImmediate(root);
         return prefab;
@@ -985,8 +985,8 @@ public static class SceneSetup
         // Prefab assets can only reference materials that are themselves saved
         // assets — an in-memory Material here would serialize as a broken
         // (magenta) reference once written to disk.
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/" + name + ".mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/" + name + ".mat";
         AssetDatabase.DeleteAsset(materialPath); // safe to rerun Rebuild Scene
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
@@ -1002,7 +1002,7 @@ public static class SceneSetup
     // (there's nothing to duck under, it's a hole/spill in the road).
     static GameObject CreateGroundDecalPrefab(string name, string textureFile, float size)
     {
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + textureFile);
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + textureFile);
         if (tex == null)
         {
             Debug.LogWarning("Texture not found: Assets/Sprites/" + textureFile);
@@ -1027,8 +1027,8 @@ public static class SceneSetup
         Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/" + name + ".mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/" + name + ".mat";
         AssetDatabase.DeleteAsset(materialPath);
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
@@ -1037,7 +1037,7 @@ public static class SceneSetup
         box.isTrigger = true;
         box.size = new Vector3(size * aspect, 0.1f, size);
 
-        string savePath = "Assets/Prefabs/" + name + ".prefab";
+        string savePath = "Assets/LadyBug/Prefabs/" + name + ".prefab";
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1417,7 +1417,7 @@ public static class SceneSetup
         string[] leverFrameFiles = { "GearLever1.png", "GearLever2.png", "GearLever3.png", "GearLever4.png", "GearLever5.png" };
         leverFramesProp.arraySize = leverFrameFiles.Length;
         for (int i = 0; i < leverFrameFiles.Length; i++)
-            leverFramesProp.GetArrayElementAtIndex(i).objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + leverFrameFiles[i]);
+            leverFramesProp.GetArrayElementAtIndex(i).objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + leverFrameFiles[i]);
         speedSo.ApplyModifiedPropertiesWithoutUndo();
 
         // Top-3 panel — on the left side of the screen (true corner anchor,
@@ -1850,12 +1850,12 @@ public static class SceneSetup
         for (int i = 0; i < statsIconSlots.Length; i++)
             statsIconSlotsProp.GetArrayElementAtIndex(i).objectReferenceValue = statsIconSlots[i];
         so.FindProperty("statsTotalText").objectReferenceValue = statsTotalText;
-        so.FindProperty("cherryIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Cherry.png");
-        so.FindProperty("heartIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Heart.png");
-        so.FindProperty("flowerIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Flower.png");
-        so.FindProperty("dogIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Dog.png");
-        so.FindProperty("catIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Cat.png");
-        so.FindProperty("bicycleIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Bicycle.png");
+        so.FindProperty("cherryIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Cherry.png");
+        so.FindProperty("heartIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Heart.png");
+        so.FindProperty("flowerIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Flower.png");
+        so.FindProperty("dogIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Dog.png");
+        so.FindProperty("catIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Cat.png");
+        so.FindProperty("bicycleIcon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Bicycle.png");
         so.FindProperty("leaderboardRoot").objectReferenceValue = leaderboardRootGo;
         SerializedProperty leaderboardPagesProp = so.FindProperty("leaderboardPages");
         leaderboardPagesProp.arraySize = leaderboardPages.Length;
@@ -2172,7 +2172,7 @@ public static class SceneSetup
     static GameObject CreateArchPrefab()
     {
         const string name = "Arch";
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/SmallArch.png");
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/SmallArch.png");
         if (tex == null)
         {
             Debug.LogWarning("Texture not found: Assets/Sprites/SmallArch.png");
@@ -2200,8 +2200,8 @@ public static class SceneSetup
         Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/" + name + ".mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/" + name + ".mat";
         AssetDatabase.DeleteAsset(materialPath); // safe to rerun Rebuild Scene
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
@@ -2215,7 +2215,7 @@ public static class SceneSetup
 
         AddStaticGroundShadow(root, spanWidth, 0.4f, name + "_Shadow");
 
-        string savePath = "Assets/Prefabs/" + name + ".prefab";
+        string savePath = "Assets/LadyBug/Prefabs/" + name + ".prefab";
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
         Object.DestroyImmediate(root);
         return prefab;
@@ -2227,7 +2227,7 @@ public static class SceneSetup
     // in PlayerController.OnTriggerEnter.
     static GameObject CreateBigArchPrefab()
     {
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/BigArchSign.png");
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/BigArchSign.png");
         if (tex == null)
         {
             Debug.LogWarning("Texture not found: Assets/Sprites/BigArchSign.png");
@@ -2265,8 +2265,8 @@ public static class SceneSetup
         Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/BigArchSign.mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/BigArchSign.mat";
         AssetDatabase.DeleteAsset(materialPath);
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
@@ -2281,7 +2281,7 @@ public static class SceneSetup
 
         AddStaticGroundShadow(root, spanWidth, 0.6f, "BigArch_Shadow");
 
-        string savePath = "Assets/Prefabs/BigArch.prefab";
+        string savePath = "Assets/LadyBug/Prefabs/BigArch.prefab";
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
         Object.DestroyImmediate(root);
         return prefab;
@@ -2289,7 +2289,7 @@ public static class SceneSetup
 
     static void CreateBigArchSpawner()
     {
-        System.IO.Directory.CreateDirectory("Assets/Prefabs");
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Prefabs");
 
         GameObject prefab = CreateBigArchPrefab();
 
@@ -2324,7 +2324,7 @@ public static class SceneSetup
         var musicGo = new GameObject("StartScreenMusic");
         musicGo.transform.SetParent(canvasGo.transform, false);
         AudioSource musicSource = musicGo.AddComponent<AudioSource>();
-        musicSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/StartScreenMusic.mp3");
+        musicSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/StartScreenMusic.mp3");
         musicSource.loop = true;
         musicSource.playOnAwake = false;
         musicSource.volume = 0.5f;
@@ -2903,7 +2903,7 @@ public static class SceneSetup
             float cx = gridLeft + cellWidth * (col + 0.5f);
             float cy = gridTop - cellHeight * (row + 0.5f);
 
-            Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + items[i].file);
+            Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + items[i].file);
 
             var iconGo = new GameObject("Icon_" + items[i].name);
             iconGo.transform.SetParent(page.transform, false);
@@ -2996,7 +2996,7 @@ public static class SceneSetup
     // something that actually reads as a physical joystick at a glance.
     static void CreateJoystickIcon(Transform parent, Vector2 pos)
     {
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/Joystick.png");
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/Joystick.png");
 
         var go = new GameObject("JoystickIcon");
         go.transform.SetParent(parent, false);
@@ -3173,7 +3173,7 @@ public static class SceneSetup
         // bug's top edge stays clear of the title above it.
         const float topHalfCenterY = 100f;
         const float bugHeight = 200f;
-        Texture2D bugTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/LadyBug1.png");
+        Texture2D bugTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/LadyBug1.png");
         var bugGo = new GameObject("Bug");
         bugGo.transform.SetParent(page.transform, false);
         RawImage bugImage = bugGo.AddComponent<RawImage>();
@@ -3197,8 +3197,8 @@ public static class SceneSetup
         so.FindProperty("isFlap").boolValue = isFlap;
         so.FindProperty("bugImage").objectReferenceValue = bugImage;
         so.FindProperty("bugNormalTexture").objectReferenceValue = bugTex;
-        so.FindProperty("bugAirTexture1").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/LadyBug1Air1.png");
-        so.FindProperty("bugAirTexture2").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/LadyBug1Air2.png");
+        so.FindProperty("bugAirTexture1").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/LadyBug1Air1.png");
+        so.FindProperty("bugAirTexture2").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/LadyBug1Air2.png");
         so.ApplyModifiedPropertiesWithoutUndo();
 
         return page;
@@ -3229,7 +3229,7 @@ public static class SceneSetup
         GameObject downArrows = CreateArrowPair(page.transform, "DownArrows", "↓", new Color(1f, 0.85f, 0.2f), -bugY, arrowXOffset);
         GameObject upArrows = CreateArrowPair(page.transform, "UpArrows", "↑", new Color(1f, 0.85f, 0.2f), bugY, arrowXOffset);
 
-        Texture2D archTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/SmallArch.png");
+        Texture2D archTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/SmallArch.png");
         var archGo = new GameObject("Arch");
         archGo.transform.SetParent(page.transform, false);
         RawImage archImg = archGo.AddComponent<RawImage>();
@@ -3267,7 +3267,7 @@ public static class SceneSetup
         so.FindProperty("upArrows").objectReferenceValue = upArrows;
         so.FindProperty("arch").objectReferenceValue = archRt;
         so.FindProperty("successText").objectReferenceValue = successGo;
-        so.FindProperty("topBugAirTexture").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/LadyBug2Air1.png");
+        so.FindProperty("topBugAirTexture").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/LadyBug2Air1.png");
         so.ApplyModifiedPropertiesWithoutUndo();
 
         return page;
@@ -3350,7 +3350,7 @@ public static class SceneSetup
         // short of the top.
         ringSo.FindProperty("arcHeight").floatValue = 2f * ovalYRadius;
         ringSo.FindProperty("successText").objectReferenceValue = successGo;
-        ringSo.FindProperty("airBugAirTexture").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/LadyBug1Air1.png");
+        ringSo.FindProperty("airBugAirTexture").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/LadyBug1Air1.png");
         ringSo.ApplyModifiedPropertiesWithoutUndo();
 
         return page;
@@ -3422,8 +3422,8 @@ public static class SceneSetup
         anim.staggerDelay = staggerDelay;
         anim.successText = successGo;
         anim.laneSpacing = laneSpacing;
-        anim.airTextureA = string.IsNullOrEmpty(airTextureA) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + airTextureA);
-        anim.airTextureB = string.IsNullOrEmpty(airTextureB) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + airTextureB);
+        anim.airTextureA = string.IsNullOrEmpty(airTextureA) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + airTextureA);
+        anim.airTextureB = string.IsNullOrEmpty(airTextureB) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + airTextureB);
 
         return page;
     }
@@ -3738,7 +3738,7 @@ public static class SceneSetup
     // the explanation instead).
     static RectTransform CreateTrickBugIcon(Transform parent, string spriteFile, Vector2 pos, float height)
     {
-        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile);
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile);
 
         var iconGo = new GameObject("Bug_" + spriteFile);
         iconGo.transform.SetParent(parent, false);
@@ -3855,9 +3855,9 @@ public static class SceneSetup
         // without covering the star.
         Texture2D[] medalTextures =
         {
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/MedalGold.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/MedalSilver.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/MedalBronze.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/MedalGold.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/MedalSilver.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/MedalBronze.png"),
         };
 
         // Photos sit in a 2-column zigzag, not one plain vertical stack:
@@ -4198,7 +4198,7 @@ public static class SceneSetup
             foreach (int col in colOrder)
             {
                 string spriteFile = IntroFlowerSprites[rng.Next(IntroFlowerSprites.Length)];
-                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/" + spriteFile);
+                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/" + spriteFile);
 
                 var flowerGo = new GameObject("Flower_" + row + "_" + col);
                 flowerGo.transform.SetParent(canvasGo.transform, false);
@@ -4233,7 +4233,7 @@ public static class SceneSetup
         var wallGo = new GameObject("GraffitiWall");
         wallGo.transform.SetParent(canvasGo.transform, false);
         RawImage wallImage = wallGo.AddComponent<RawImage>();
-        wallImage.texture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/GraffitiWall.png");
+        wallImage.texture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/GraffitiWall.png");
         RectTransform wallRt = wallImage.GetComponent<RectTransform>();
         wallRt.anchorMin = Vector2.zero;
         wallRt.anchorMax = Vector2.one;
@@ -4278,12 +4278,12 @@ public static class SceneSetup
 
         Texture2D[] countdownTextures =
         {
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/CountdownGraffiti5.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/CountdownGraffiti4.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/CountdownGraffiti3.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/CountdownGraffiti2.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/CountdownGraffiti1.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sprites/CountdownGraffitiStart.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/CountdownGraffiti5.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/CountdownGraffiti4.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/CountdownGraffiti3.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/CountdownGraffiti2.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/CountdownGraffiti1.png"),
+            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/CountdownGraffitiStart.png"),
         };
 
         // Continuous buzz while the flowers fill in (grows with them, see
@@ -4294,13 +4294,13 @@ public static class SceneSetup
         // schedule instead of the instant the scene loads.
         var introGo = new GameObject("IntroSequence");
         AudioSource introBuzzSource = introGo.AddComponent<AudioSource>();
-        introBuzzSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Buzz.wav");
+        introBuzzSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/Buzz.wav");
         introBuzzSource.loop = true;
         introBuzzSource.playOnAwake = false;
         introBuzzSource.volume = 0f;
 
         AudioSource introShiftSource = introGo.AddComponent<AudioSource>();
-        introShiftSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/GearShift.wav");
+        introShiftSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/GearShift.wav");
         introShiftSource.playOnAwake = false;
 
         IntroSequence intro = introGo.AddComponent<IntroSequence>();
@@ -4715,8 +4715,8 @@ public static class SceneSetup
         Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { color = new Color(0f, 0f, 0f, 0.35f) };
 
-        System.IO.Directory.CreateDirectory("Assets/Materials");
-        string materialPath = "Assets/Materials/" + materialName + ".mat";
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials");
+        string materialPath = "Assets/LadyBug/Materials/" + materialName + ".mat";
         AssetDatabase.DeleteAsset(materialPath);
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;

@@ -6,7 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Main.unity
+    path: Assets/LadyBug/Scenes/Main.unity
     guid: 02b4195a87e544e4ab51778fd5982897
   m_configObjects: {}
-  m_UseUCBPForAssetBundles: 0
