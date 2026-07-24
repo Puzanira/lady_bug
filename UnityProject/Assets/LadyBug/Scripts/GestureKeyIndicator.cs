@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Raw keyboard-state debug view for the gesture simulator — one square per
 // physical key, lit while held. Separate from GestureIndicator, which shows
 // the INTERPRETED gesture (jump/duck/lean/flap/brake) instead of the raw
@@ -41,4 +44,5 @@ public class GestureKeyIndicator : MonoBehaviour
             gesture.RightHandUpKey, gesture.RightHandDownKey
         };
     }
+}
 }

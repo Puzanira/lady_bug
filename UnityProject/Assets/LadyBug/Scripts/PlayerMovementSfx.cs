@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Per-player looping movement sound: running feet while grounded (normal or
 // ducking), wing buzz while airborne (jumping/bouncing) — both sources loop
 // continuously and are just volume-gated by state, so swapping between them
@@ -27,4 +30,5 @@ public class PlayerMovementSfx : MonoBehaviour
         feetSource.volume = airborne ? 0f : volume;
         wingsSource.volume = airborne ? volume : 0f;
     }
+}
 }

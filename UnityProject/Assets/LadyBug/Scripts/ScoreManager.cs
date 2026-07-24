@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 public class ScoreManager : MonoBehaviour
 {
     public static ScoreManager Instance { get; private set; }
@@ -67,4 +70,5 @@ public class ScoreManager : MonoBehaviour
         if (scoreText != null)
             scoreText.text = _score.ToString();
     }
+}
 }

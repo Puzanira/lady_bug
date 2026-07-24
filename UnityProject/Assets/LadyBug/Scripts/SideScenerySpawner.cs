@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 public class SideScenerySpawner : MonoBehaviour
 {
     [SerializeField] private GameObject[] prefabs;
@@ -73,4 +76,5 @@ public class SideScenerySpawner : MonoBehaviour
         Vector3 pos = new Vector3(x, prefab.transform.position.y, spawnZ);
         Instantiate(prefab, pos, prefab.transform.rotation);
     }
+}
 }

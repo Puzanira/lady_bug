@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Animated demo for the "ТРЮК: КОЛЬЦО" instruction page — three sequential
 // beats instead of one continuous simultaneous cross (see
 // PlayerController.TryDetectRingTrick for the real mechanic): airBug rises
@@ -228,4 +231,5 @@ public class RingTrickAnimation : MonoBehaviour
         if (airArrow != null)
             airArrow.gameObject.SetActive(false);
     }
+}
 }

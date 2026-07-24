@@ -2,6 +2,9 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Yes/No "quit game?" dialog — opened by HelpController when Q is pressed
 // while the F1 help screen is up (braking was removed from every control
 // scheme, so the old "hold brake for 5s" trigger no longer has a key to
@@ -96,4 +99,5 @@ public class PauseController : MonoBehaviour
         if (noText != null)
             noText.color = _confirmYes ? Color.white : Highlighted;
     }
+}
 }

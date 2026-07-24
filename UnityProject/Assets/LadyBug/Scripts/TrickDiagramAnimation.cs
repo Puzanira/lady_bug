@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Generic two-player trick instruction diagram — plays back a small
 // scripted path of (lane, height) waypoints for two ladybug icons on a
 // simple 3-lane track, looping. Used by the 5 newer trick pages (ЧЕХАРДА,
@@ -268,4 +271,5 @@ public class TrickDiagramAnimation : MonoBehaviour
             return delta.y > 0f ? "↑" : "↓";
         return null;
     }
+}
 }

@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Keeps a flat shadow directly beneath a target on the road surface — X/Z
 // track the target, Y stays pinned to the road regardless of how high the
 // target currently is (jumping, ducking, bouncing), so its lane position and
@@ -47,4 +50,5 @@ public class GroundShadow : MonoBehaviour
         float scale = Mathf.Max(minScale, 1f - height * heightShrinkFactor);
         transform.localScale = _baseScale * scale;
     }
+}
 }

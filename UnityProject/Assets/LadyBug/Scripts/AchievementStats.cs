@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Per-category collect/hit/trick counts for the post-win achievements
 // screen — separate from ScoreManager/TricksManager's own totals, which
 // only know the point value, not *what* was collected/hit. Fed directly at
@@ -85,4 +88,5 @@ public class AchievementStats : MonoBehaviour
     {
         return name.StartsWith("Bicycle") || name.StartsWith("Motorbike") || name.StartsWith("Motorcycle");
     }
+}
 }

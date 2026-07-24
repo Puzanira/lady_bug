@@ -1,5 +1,8 @@
 using UnityEditor;
 
+namespace LadyBug
+{
+
 public static class BuildScript
 {
     // Wasn't reachable from the Editor UI at all before (no menu item, and
@@ -35,4 +38,5 @@ public static class BuildScript
         var report = BuildPipeline.BuildPlayer(buildOptions);
         UnityEngine.Debug.Log("Build result: " + report.summary.result);
     }
+}
 }

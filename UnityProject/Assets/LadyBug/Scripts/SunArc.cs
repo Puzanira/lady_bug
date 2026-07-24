@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Sun sweeps back and forth along a low dome-shaped arc across the sky —
 // "по дуге по всему небу туда и обратно" — instead of sitting at one fixed
 // spot. Also keeps facing the camera: once it travels well off to either
@@ -21,4 +24,5 @@ public class SunArc : MonoBehaviour
         if (Camera.main != null)
             transform.rotation = Camera.main.transform.rotation;
     }
+}
 }

@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Central one-shot sound-effect player. A single shared AudioSource with
 // PlayOneShot lets overlapping effects (e.g. both players hitting something
 // on the same frame) mix instead of cutting each other off.
@@ -66,4 +69,5 @@ public class SfxManager : MonoBehaviour
     {
         return SpeedController.Instance != null && SpeedController.Instance.IsRunning;
     }
+}
 }

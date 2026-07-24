@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 public class GameTimer : MonoBehaviour
 {
     public static GameTimer Instance { get; private set; }
@@ -65,4 +68,5 @@ public class GameTimer : MonoBehaviour
         int seconds = Mathf.FloorToInt(t % 60f);
         timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
     }
+}
 }

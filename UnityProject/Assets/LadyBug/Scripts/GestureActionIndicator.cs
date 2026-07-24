@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Bottom-most line of the gesture HUD — the single current action in one
 // word, for an at-a-glance readout under the raw key squares and the
 // interpreted-gesture arrows.
@@ -25,4 +28,5 @@ public class GestureActionIndicator : MonoBehaviour
         if (gestureInput.LeanRightHeld) return "ВПРАВО";
         return "–";
     }
+}
 }

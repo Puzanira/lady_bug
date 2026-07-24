@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // HUD readout of a player's current gesture-sensor state (from real sensors
 // once connected, or the keyboard simulator) — lights up an arrow per hand
 // plus a marker for the flap/jump state, so the full reading is visible
@@ -34,4 +37,5 @@ public class GestureIndicator : MonoBehaviour
     {
         return flapping ? "<color=#FFD633>✈</color>" : "<color=#555555>–</color>";
     }
+}
 }

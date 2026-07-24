@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Holding duck (down key, or both-hands-down gesture) on every active player
 // at once opens the quit-confirm dialog — the gesture-based replacement for
 // the old "hold brake 5s" exit trigger (braking was removed from every
@@ -73,4 +76,5 @@ public class DuckToExitController : MonoBehaviour
         if (countdownText != null)
             countdownText.gameObject.SetActive(visible);
     }
+}
 }

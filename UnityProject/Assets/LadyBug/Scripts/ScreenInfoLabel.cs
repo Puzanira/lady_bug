@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Tiny always-on-top readout of the actual render resolution/fullscreen
 // state — for diagnosing UI layout mismatches between the Editor Game view
 // and a standalone build (CanvasScaler's matchWidthOrHeight only guarantees
@@ -17,4 +20,5 @@ public class ScreenInfoLabel : MonoBehaviour
 
         label.text = Screen.width + "x" + Screen.height + (Screen.fullScreen ? " FS" : " Win");
     }
+}
 }

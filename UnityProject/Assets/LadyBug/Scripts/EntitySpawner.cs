@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 public class EntitySpawner : MonoBehaviour
 {
     // Selection happens in two steps: good vs. bad, then — only for bad —
@@ -79,4 +82,5 @@ public class EntitySpawner : MonoBehaviour
             return null;
         return pool[Random.Range(0, pool.Length)];
     }
+}
 }

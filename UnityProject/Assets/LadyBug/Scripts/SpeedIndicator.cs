@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 public class SpeedIndicator : MonoBehaviour
 {
     public static SpeedIndicator Instance { get; private set; }
@@ -87,4 +90,5 @@ public class SpeedIndicator : MonoBehaviour
         leverImage.texture = leverFrames[0];
         _shiftRoutine = null;
     }
+}
 }

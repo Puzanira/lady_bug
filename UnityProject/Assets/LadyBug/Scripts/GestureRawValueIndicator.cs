@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Raw sensor readout for the gesture HUD — sits between the raw key squares
 // (GestureKeyIndicator) and the interpreted-gesture arrows (GestureIndicator):
 // shows the hand distances (mm) a real sensor would report, before they get
@@ -18,4 +21,5 @@ public class GestureRawValueIndicator : MonoBehaviour
         valueText.text = "Л:" + gestureInput.LeftHandDistanceMm + "мм"
                         + "  П:" + gestureInput.RightHandDistanceMm + "мм";
     }
+}
 }

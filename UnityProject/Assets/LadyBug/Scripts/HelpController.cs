@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // F1 toggles a help overlay showing the full controls — freezes the road
 // and input while it's up, the same way PauseController's dialog does.
 public class HelpController : MonoBehaviour
@@ -77,4 +80,5 @@ public class HelpController : MonoBehaviour
         foreach (var p in FindObjectsByType<PlayerController>())
             p.enabled = true;
     }
+}
 }

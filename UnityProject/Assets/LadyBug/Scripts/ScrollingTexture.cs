@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 public class ScrollingTexture : MonoBehaviour
 {
     [SerializeField] private float dashPeriod = 4f;
@@ -18,4 +21,5 @@ public class ScrollingTexture : MonoBehaviour
         _offset.y -= (speed / dashPeriod) * Time.deltaTime;
         _renderer.material.mainTextureOffset = _offset;
     }
+}
 }

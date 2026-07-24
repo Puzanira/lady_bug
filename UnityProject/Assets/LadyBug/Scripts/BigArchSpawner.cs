@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Spawns the road-wide arch (all 3 lanes at once) on its own rare interval,
 // separate from EntitySpawner — that one picks a single lane per spawn, but
 // this obstacle always spans every lane, so it needs its own timer and
@@ -39,4 +42,5 @@ public class BigArchSpawner : MonoBehaviour
     {
         _nextInterval = Random.Range(minInterval, maxInterval);
     }
+}
 }

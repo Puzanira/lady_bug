@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Very first thing shown when the game launches: flowers rain down and pile
 // up (bottom row first, see SceneSetup.CreateIntroScreen for the fill
 // order) until the whole screen is covered — held for a beat, then swapped
@@ -303,4 +306,5 @@ public class IntroSequence : MonoBehaviour
         if (canvasRoot != null)
             canvasRoot.SetActive(false);
     }
+}
 }
