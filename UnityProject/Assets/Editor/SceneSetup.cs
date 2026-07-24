@@ -1736,7 +1736,6 @@ public static class SceneSetup
         const int iconRows = 5;
         const float iconGridTop = 40f;
         const float iconGridLeft = -540f;
-        const float iconGridRight = 540f;
         const float iconCellWidth = 108f; // (iconGridRight - iconGridLeft) / iconCols
         const float iconCellHeight = 72f;
         const float iconSize = 54f;
@@ -4316,7 +4315,7 @@ public static class SceneSetup
             countdownTexturesProp.GetArrayElementAtIndex(i).objectReferenceValue = countdownTextures[i];
         introSo.FindProperty("buzzSource").objectReferenceValue = introBuzzSource;
         introSo.FindProperty("shiftSource").objectReferenceValue = introShiftSource;
-        introSo.FindProperty("startScreen").objectReferenceValue = Object.FindObjectOfType<StartScreenController>();
+        introSo.FindProperty("startScreen").objectReferenceValue = Object.FindAnyObjectByType<StartScreenController>();
         SerializedProperty flowersProp = introSo.FindProperty("flowers");
         flowersProp.arraySize = orderedFlowers.Count;
         for (int i = 0; i < orderedFlowers.Count; i++)

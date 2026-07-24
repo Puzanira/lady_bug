@@ -128,26 +128,26 @@ public class WinSequence : MonoBehaviour
             finishText.SetActive(false);
         }
 
-        foreach (var spawner in FindObjectsOfType<EntitySpawner>())
+        foreach (var spawner in FindObjectsByType<EntitySpawner>())
             spawner.enabled = false;
-        foreach (var spawner in FindObjectsOfType<SideScenerySpawner>())
+        foreach (var spawner in FindObjectsByType<SideScenerySpawner>())
             spawner.enabled = false;
         // BigArchSpawner runs on its own timer independent of EntitySpawner
         // and only checks SpeedController.IsRunning (which stays true
         // through the whole win sequence) — without disabling it too, it
         // could drop a fresh arch on the road well after the one-time
         // fade-out below already ran, leaving it stranded there for good.
-        foreach (var spawner in FindObjectsOfType<BigArchSpawner>())
+        foreach (var spawner in FindObjectsByType<BigArchSpawner>())
             spawner.enabled = false;
         // Clouds and the sun drift on their own timers, independent of
         // SpeedController (so they keep moving even on the start screen) —
         // nothing above stops them, so without this they'd keep sailing
         // across the sky through the whole win sequence.
-        foreach (var spawner in FindObjectsOfType<CloudSpawner>())
+        foreach (var spawner in FindObjectsByType<CloudSpawner>())
             spawner.enabled = false;
-        foreach (var cloud in FindObjectsOfType<CloudDrift>())
+        foreach (var cloud in FindObjectsByType<CloudDrift>())
             cloud.enabled = false;
-        foreach (var sun in FindObjectsOfType<SunArc>())
+        foreach (var sun in FindObjectsByType<SunArc>())
             sun.enabled = false;
 
         if (GameTimer.Instance != null)
@@ -155,7 +155,7 @@ public class WinSequence : MonoBehaviour
 
         // Every player currently in the scene — works for 1 or 2 players
         // without the sequence needing to know which/how many up front.
-        PlayerController[] players = FindObjectsOfType<PlayerController>();
+        PlayerController[] players = FindObjectsByType<PlayerController>();
         foreach (var pc in players)
         {
             pc.ForceAirborneVisual(); // wings out for the flight, not whatever ground/air pose they were mid-stride in
@@ -198,7 +198,7 @@ public class WinSequence : MonoBehaviour
         if (SpeedController.Instance != null)
             SpeedController.Instance.BeginWinBoost();
 
-        MovingEntity[] entities = FindObjectsOfType<MovingEntity>();
+        MovingEntity[] entities = FindObjectsByType<MovingEntity>();
         foreach (var entity in entities)
         {
             Collider col = entity.GetComponent<Collider>();
@@ -497,7 +497,7 @@ public class WinSequence : MonoBehaviour
             if (Input.GetKeyDown(key))
                 return true;
 
-        foreach (var gesture in FindObjectsOfType<GestureInput>())
+        foreach (var gesture in FindObjectsByType<GestureInput>())
         {
             if (gesture.JumpDown || gesture.DuckHeld || gesture.LeanLeftDown || gesture.LeanRightDown)
                 return true;

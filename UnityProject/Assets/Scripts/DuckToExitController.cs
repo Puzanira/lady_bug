@@ -56,7 +56,7 @@ public class DuckToExitController : MonoBehaviour
 
     private bool AreAllPlayersDucking()
     {
-        PlayerController[] players = FindObjectsOfType<PlayerController>();
+        PlayerController[] players = FindObjectsByType<PlayerController>();
         if (players.Length == 0)
             return false;
 
