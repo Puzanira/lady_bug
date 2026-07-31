@@ -45,15 +45,15 @@ public class PauseController : MonoBehaviour
     {
         _dialogOpen = true;
         _confirmYes = false;
-        _gestureInputs = FindObjectsOfType<GestureInput>();
-        _joystickInputs = FindObjectsOfType<JoystickInput>();
+        _gestureInputs = FindObjectsByType<GestureInput>();
+        _joystickInputs = FindObjectsByType<JoystickInput>();
 
         if (SpeedController.Instance != null)
             SpeedController.Instance.SetPaused(true);
         if (GameTimer.Instance != null)
             GameTimer.Instance.Pause();
 
-        foreach (var p in FindObjectsOfType<PlayerController>())
+        foreach (var p in FindObjectsByType<PlayerController>())
             p.enabled = false;
 
         if (dialogRoot != null)
@@ -117,7 +117,7 @@ public class PauseController : MonoBehaviour
         if (GameTimer.Instance != null)
             GameTimer.Instance.Resume();
 
-        foreach (var p in FindObjectsOfType<PlayerController>())
+        foreach (var p in FindObjectsByType<PlayerController>())
             p.enabled = true;
     }
 

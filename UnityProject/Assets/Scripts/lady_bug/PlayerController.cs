@@ -347,7 +347,7 @@ public class PlayerController : MonoBehaviour
 
     private PlayerController FindPartnerInLane(int lane)
     {
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other != this && other.CurrentLane == lane)
                 return other;
@@ -357,7 +357,7 @@ public class PlayerController : MonoBehaviour
 
     private bool HasAirbornePartner()
     {
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other != this && other.IsAirborne)
                 return true;
@@ -367,7 +367,7 @@ public class PlayerController : MonoBehaviour
 
     private bool IsSupportingBouncingPartner()
     {
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other != this && other.CurrentLane == _currentLane && other._verticalState == VerticalState.Bouncing)
                 return true;
@@ -624,7 +624,7 @@ public class PlayerController : MonoBehaviour
         if (!(bothAirborne && sameDirection && spansBothEdges && closeInTime))
             return;
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -667,7 +667,7 @@ public class PlayerController : MonoBehaviour
         if (!(bothGrounded && sameDirection && spansBothEdges && closeInTime))
             return;
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -719,7 +719,7 @@ public class PlayerController : MonoBehaviour
         if (!HasBigRingPattern(out float myEnd))
             return;
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -775,7 +775,7 @@ public class PlayerController : MonoBehaviour
         if (!HasInfinityPattern(out float myEnd))
             return;
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -809,7 +809,7 @@ public class PlayerController : MonoBehaviour
         if (_noGroundTimer < HoverTrickDuration)
             return;
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -833,7 +833,7 @@ public class PlayerController : MonoBehaviour
         if (Time.time - _lastRingTrickTime < RingTrickCooldown)
             return; // already scored this exact swap from the other player's side
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -862,7 +862,7 @@ public class PlayerController : MonoBehaviour
 
     private PlayerController FindGroundedOccupant(int lane)
     {
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
@@ -883,14 +883,14 @@ public class PlayerController : MonoBehaviour
         PlayerController grounded = null;
         PlayerController airbornePeer = null;
 
-        foreach (var other in FindObjectsOfType<PlayerController>())
+        foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this || other.CurrentLane != lane)
                 continue;
 
             if (!other.IsAirborne)
                 grounded = other;
-            else if (GetInstanceID() > other.GetInstanceID())
+            else if (GetEntityId() > other.GetEntityId())
                 airbornePeer = other; // the lower ID wins the tie and lands
         }
 

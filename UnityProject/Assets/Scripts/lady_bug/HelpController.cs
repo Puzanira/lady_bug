@@ -59,7 +59,7 @@ public class HelpController : MonoBehaviour
         if (GameTimer.Instance != null)
             GameTimer.Instance.Pause();
 
-        foreach (var p in FindObjectsOfType<PlayerController>())
+        foreach (var p in FindObjectsByType<PlayerController>())
             p.enabled = false;
     }
 
@@ -74,7 +74,7 @@ public class HelpController : MonoBehaviour
         if (GameTimer.Instance != null)
             GameTimer.Instance.Resume();
 
-        foreach (var p in FindObjectsOfType<PlayerController>())
+        foreach (var p in FindObjectsByType<PlayerController>())
             p.enabled = true;
     }
 }

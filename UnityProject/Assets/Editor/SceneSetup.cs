@@ -2007,7 +2007,6 @@ public static class SceneSetup
         const int iconRows = 5;
         const float iconGridTop = 40f;
         const float iconGridLeft = -540f;
-        const float iconGridRight = 540f;
         const float iconCellWidth = 108f; // (iconGridRight - iconGridLeft) / iconCols
         const float iconCellHeight = 72f;
         const float iconSize = 54f;
@@ -5127,7 +5126,7 @@ public static class SceneSetup
         // to page 0 right as it becomes visible, regardless of which
         // slot's intro just finished. isPrimaryGame itself is also wired
         // here so RunCountdown can gate its PlayMusic() call to БК only.
-        introSo.FindProperty("startScreen").objectReferenceValue = Object.FindObjectOfType<StartScreenController>();
+        introSo.FindProperty("startScreen").objectReferenceValue = Object.FindAnyObjectByType<StartScreenController>();
         introSo.FindProperty("isPrimaryGame").boolValue = isPrimaryGame;
         introSo.FindProperty("shiftSource").objectReferenceValue = introShiftSource;
         SerializedProperty flowersProp = introSo.FindProperty("flowers");
