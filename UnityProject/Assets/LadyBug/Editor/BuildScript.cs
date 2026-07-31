@@ -22,7 +22,7 @@ public static class BuildScript
 
         var buildOptions = new BuildPlayerOptions
         {
-            scenes = new[] { "Assets/Scenes/Main.unity" },
+            scenes = new[] { "Assets/LadyBug/Scenes/Main.unity" },
             // Outside this repo entirely (../../.results/bin, a sibling of
             // lady_bug under Y-GameLab) — same place earlier manual builds
             // already landed, and .gitignore's UnityProject/Builds/ entry
