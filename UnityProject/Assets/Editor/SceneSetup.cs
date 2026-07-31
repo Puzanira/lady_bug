@@ -437,7 +437,7 @@ public static class SceneSetup
         shadow.transform.position = new Vector3(target.position.x, 0.02f, target.position.z);
 
         Renderer renderer = shadow.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { color = new Color(0f, 0f, 0f, 0.4f) };
         renderer.sharedMaterial = material;
 
@@ -468,7 +468,7 @@ public static class SceneSetup
         sprite.transform.localPosition = new Vector3(0f, 0.15f, -0.51f);
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex, color = tint };
         renderer.sharedMaterial = material;
 
@@ -506,7 +506,7 @@ public static class SceneSetup
         surface.transform.localScale = new Vector3(roadWidth, 0.1f, RoadLength);
 
         Renderer surfaceRenderer = surface.GetComponent<Renderer>();
-        Shader roadShader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
+        Shader roadShader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
         Material roadMaterial = new Material(roadShader)
         {
             mainTexture = CreateRoadTexture(),
@@ -563,7 +563,7 @@ public static class SceneSetup
             Object.DestroyImmediate(ground.GetComponent<Collider>());
 
             Renderer renderer = ground.GetComponent<Renderer>();
-            Shader shader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
             Material material = new Material(shader) { color = new Color(0.55f, 0.72f, 0.35f) };
             if (grassTexture != null)
             {
@@ -628,7 +628,7 @@ public static class SceneSetup
             Object.DestroyImmediate(shoulder.GetComponent<Collider>());
 
             Renderer renderer = shoulder.GetComponent<Renderer>();
-            Shader shader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
             Material material = new Material(shader)
             {
                 mainTexture = shoulderTexture,
@@ -655,7 +655,7 @@ public static class SceneSetup
         Object.DestroyImmediate(divider.GetComponent<MeshCollider>());
 
         Renderer renderer = divider.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
         Material material = new Material(shader)
         {
             mainTexture = CreateDashTexture(seedOffset),
@@ -911,7 +911,7 @@ public static class SceneSetup
         sprite.transform.localPosition = Vector3.zero;
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
@@ -956,7 +956,7 @@ public static class SceneSetup
         sprite.transform.localScale = new Vector3(1600f, 1000f, 1f);
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
         Material material = new Material(shader) { mainTexture = tex };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
@@ -996,7 +996,7 @@ public static class SceneSetup
         sprite.transform.localRotation = Quaternion.identity;
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
         renderer.sharedMaterial = material; // scene object, not a prefab — in-memory material is fine here
     }
@@ -1114,7 +1114,7 @@ public static class SceneSetup
         sprite.transform.localPosition = Vector3.zero;
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = idleTex };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
@@ -1194,7 +1194,7 @@ public static class SceneSetup
         sprite.transform.localPosition = Vector3.zero;
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
         // Prefab assets can only reference materials that are themselves saved
@@ -1239,7 +1239,7 @@ public static class SceneSetup
         sprite.transform.localScale = new Vector3(size * aspect, size, 1f);
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
@@ -2442,7 +2442,7 @@ public static class SceneSetup
         sprite.transform.localScale = new Vector3(spanWidth, spriteHeight, 1f);
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
@@ -2512,7 +2512,7 @@ public static class SceneSetup
         sprite.transform.localScale = new Vector3(spanWidth, spriteHeight, 1f);
 
         Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { mainTexture = tex };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
@@ -6071,7 +6071,7 @@ public static class SceneSetup
     static void ApplyColor(GameObject go, Color color)
     {
         Renderer renderer = go.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
         Material material = new Material(shader) { color = color };
         renderer.sharedMaterial = material;
     }
@@ -6093,7 +6093,7 @@ public static class SceneSetup
         shadow.transform.localPosition = new Vector3(0f, -root.transform.position.y + groundY, 0f);
 
         Renderer renderer = shadow.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
         Material material = new Material(shader) { color = new Color(0f, 0f, 0f, 0.35f) };
 
         System.IO.Directory.CreateDirectory("Assets/Materials/lady_bug");
