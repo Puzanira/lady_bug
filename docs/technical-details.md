@@ -42,11 +42,11 @@
 вторая запущенная копия Unity с тем же проектом падает с ошибкой «another
 Unity instance is running». Рабочий цикл вместо этого:
 
-1. Агент правит `.cs`-файлы в `UnityProject/Assets/Scripts/` (рантайм-логика)
-   и/или `UnityProject/Assets/Editor/SceneSetup.cs` (генератор сцены —
+1. Агент правит `.cs`-файлы в `UnityProject/Assets/LadyBug/Scripts/` (рантайм-логика)
+   и/или `UnityProject/Assets/LadyBug/Editor/SceneSetup.cs` (генератор сцены —
    правится только если меняется состав/расположение объектов на сцене, а не
    только их поведение).
-2. Если менялся **только** рантайм-код (`Assets/Scripts/*.cs`, кроме
+2. Если менялся **только** рантайм-код (`Assets/LadyBug/Scripts/*.cs`, кроме
    `SceneSetup.cs`) — Unity подхватит изменения сама при переключении фокуса
    на Editor (домен перезагрузится, скрипты перекомпилируются). Rebuild
    Scene **не нужен**.
@@ -80,7 +80,7 @@ print(s.count('{')-s.count('}'), s.count('(')-s.count(')'))
 
 - **`SerializedObject`/`SerializedProperty`** — единственный способ задать
   значения приватных `[SerializeField]`-полей компонентов, создаваемых в
-  `SceneSetup.cs` (сам он — Editor-скрипт, лежит в `Assets/Editor/`, не
+  `SceneSetup.cs` (сам он — Editor-скрипт, лежит в `Assets/LadyBug/Editor/`, не
   попадает в билд). Для `KeyCode`-полей — **обязательно** `.intValue = (int)someKeyCode`,
   не `.enumValueIndex`: порядок объявления констант в `KeyCode` не совпадает
   с их числовым значением, `.enumValueIndex` даст не ту клавишу.
@@ -108,8 +108,8 @@ print(s.count('{')-s.count('}'), s.count('(')-s.count(')'))
   и ввод, и обработку столкновений.
 
 ### Сборка билда
-`UnityProject/Assets/Editor/BuildScript.cs` → `BuildScript.PerformBuild()`
-собирает `Assets/Scenes/Main.unity` в `Builds/LadyBugHitTheRoad.app`
+`UnityProject/Assets/LadyBug/Editor/BuildScript.cs` → `BuildScript.PerformBuild()`
+собирает `Assets/LadyBug/Scenes/Main.unity` в `Builds/LadyBugHitTheRoad.app`
 (`BuildTarget.StandaloneOSX`). Вызывается через
 `Unity -batchmode -quit -executeMethod BuildScript.PerformBuild` — но, как и
 с Rebuild Scene, пока Editor открыт у пользователя, агент не может выполнить
@@ -135,7 +135,7 @@ print(s.count('{')-s.count('}'), s.count('(')-s.count(')'))
   проступает лёгкое виньетирование по краям прозрачности. Сгенерированное
   затем **обрезается по bounding box** (небольшой паддинг) и уменьшается до
   ~400px по большей стороне, чтобы не раздувать репозиторий (см. плотность
-  файлов в `Assets/Sprites/` — обычно единицы-десятки КБ на спрайт).
+  файлов в `Assets/LadyBug/Sprites/` — обычно единицы-десятки КБ на спрайт).
 
 ### Структура репозитория
 ```
@@ -152,11 +152,11 @@ Y-GameLab/
 │   │   │   ├── Materials/    ← генерируются SceneSetup.cs автоматически
 │   │   │   └── Scenes/       ← Main.unity, тоже генерируется, не редактировать руками
 │   │   ├── Packages/manifest.json  ← требует "com.unity.ugui": "2.0.0" (не входит в модуль по умолчанию)
-│   │   └── ProjectSettings/ProjectVersion.txt  ← Unity 6000.0.78f1
+│   │   └── ProjectSettings/ProjectVersion.txt  ← Unity 6000.5.3f1
 │   ├── docs/              ← этот файл, game-brief.md (бриф курса/задания)
 │   ├── ArduinoFirmware/   ← прошивки для реального железа (раздел 5.7)
 │   │   └── GestureSensors/GestureSensors.ino  ← 4x VL53L0X + 2 кнопки, одна плата на обоих игроков
-│   └── RawAssets/         ← сырые исходники арта до конвертации в UnityProject/Assets/Sprites
+│   └── RawAssets/         ← сырые исходники арта до конвертации в UnityProject/Assets/LadyBug/Sprites
 │       └── panel/         ← фото/чертежи/концепт-арт корпуса автомата (не Unity-ассеты, раздел 5.8)
 ├── My project/            ← несвязанный черновой Unity-проект, не трогать
 └── UnityTestProject/      ← несвязанный черновой Unity-проект, не трогать
@@ -175,13 +175,13 @@ IDE-файлы, но **не** `Assets/Prefabs|Materials|Scenes` — они за�
 `gh repo create`/`gh pr` и т.п.
 
 ### Быстрый старт на новой машине
-1. Установить Unity **6000.0.78f1** (или достаточно близкую 6000.x — если
+1. Установить Unity **6000.5.3f1** (или достаточно близкую 6000.x — если
    версии разойдутся, Unity Hub предложит апгрейд `ProjectVersion.txt`, это
    безопасно).
 2. Unity Hub → Open → выбрать именно `lady_bug/UnityProject`
    (не `lady_bug/`).
 3. После первого открытия: **Tools → Rebuild Scene** — соберёт
-   `Assets/Scenes/Main.unity` с нуля из кода. Без этого шага сцены не будет
+   `Assets/LadyBug/Scenes/Main.unity` с нуля из кода. Без этого шага сцены не будет
    вообще (она не хранится в git/файлах вручную).
 4. Play.
 
@@ -687,8 +687,8 @@ shadow»).
 | `StartScreenController.cs` | Весь стартовый экран: выбор игроков/контроллера, карусель из страниц-`GameObject` (текст/схемы трюков и жестов/топ-результаты — раздел «Стартовый экран» выше), запуск игры (подтверждение — Space/Enter, не газ). |
 | `ScrollingTexture.cs` | Скроллинг текстуры (дорожная разметка и асфальт дороги — оба используют один и тот же приём, каждый со своим tile-size). |
 
-`Assets/Editor/SceneSetup.cs` — единственное место, где строится сцена
-(см. раздел 1, Вариант B). `Assets/Editor/BuildScript.cs` — сборка билда.
+`Assets/LadyBug/Editor/SceneSetup.cs` — единственное место, где строится сцена
+(см. раздел 1, Вариант B). `Assets/LadyBug/Editor/BuildScript.cs` — сборка билда.
 
 ## 5. Настоящее железо (Arduino) — установка и что пошло не так
 

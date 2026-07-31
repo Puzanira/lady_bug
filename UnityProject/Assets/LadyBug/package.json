@@ -1,0 +1,8 @@
+{
+  "name": "com.aigamestudio.game-lady-bug",
+  "version": "0.1.0",
+  "displayName": "Lady Bug",
+  "description": "Lady Bug — arcade cabinet game. A ladybug flies an endless obstacle course; steered in the cabinet by the two height sensors (HeightA / HeightB).",
+  "unity": "6000.5",
+  "author": { "name": "AI Game Studio" }
+}

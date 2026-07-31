@@ -1,0 +1,7 @@
+{
+  "name": "Lady Bug",
+  "version": "0.1.0",
+  "entryScene": "Assets/LadyBug/Scenes/Main.unity",
+  "controls": ["HeightA", "HeightB"],
+  "launcherRain": null
+}

@@ -1,0 +1,53 @@
+{
+  "unityProjectPath": "UnityProject",
+  "gameFolder": "Assets/LadyBug",
+  "packageNamePrefix": "com.aigamestudio.game-",
+  "rawInputAllowlist": [
+    {
+      "file": "Scripts/lady_bug/StartScreenController.cs",
+      "baselineCount": 8
+    },
+    {
+      "file": "Scripts/lady_bug/PlayerController.cs",
+      "baselineCount": 7
+    },
+    {
+      "file": "Scripts/lady_bug/GestureInput.cs",
+      "baselineCount": 4
+    },
+    {
+      "file": "Scripts/lady_bug/LiveBugReactionAnimator.cs",
+      "baselineCount": 4
+    },
+    {
+      "file": "Scripts/lady_bug/PauseController.cs",
+      "baselineCount": 3
+    },
+    {
+      "file": "Scripts/lady_bug/HelpController.cs",
+      "baselineCount": 2
+    },
+    {
+      "file": "Scripts/loader/LoaderScreenController.cs",
+      "baselineCount": 2
+    },
+    {
+      "file": "Scripts/lady_bug/DuckToExitController.cs",
+      "baselineCount": 1
+    },
+    {
+      "file": "Scripts/lady_bug/GestureKeyIndicator.cs",
+      "baselineCount": 1
+    },
+    {
+      "file": "Scripts/lady_bug/WinSequence.cs",
+      "baselineCount": 1
+    }
+  ],
+  "assetWhitelist": [
+    "DefaultVolumeProfile.asset",
+    "UniversalRenderPipelineGlobalSettings.asset",
+    "Settings",
+    "StreamingAssets"
+  ]
+}
