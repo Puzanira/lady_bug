@@ -394,7 +394,11 @@ public class WinSequence : MonoBehaviour
         // another page to sit through.
         yield return new WaitForSeconds(finalTitleHoldDuration);
 
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        // Reload by buildIndex, not name: in the arcade-hub build lady_bug's entry
+        // scene and Sisyphus's are BOTH named "Main", so LoadScene(name) resolves to
+        // the first "Main" in Build Settings (Sisyphus) and launches the wrong game.
+        // buildIndex is collision-proof both standalone and in-hub.
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     // Post-win summary, split across a few pages (same "read at your own

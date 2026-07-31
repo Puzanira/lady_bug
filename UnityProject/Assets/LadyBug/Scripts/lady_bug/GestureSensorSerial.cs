@@ -55,8 +55,30 @@ public sealed class GestureSensorSerial : MonoBehaviour
         Instance = this;
     }
 
+    // Arcade cabinet: this reader must NOT touch the serial port at all. In the
+    // cabinet ONE combo board (ArduinoFirmware/CombinedBoard) carries the joystick
+    // AND both height sensors, and the hub's arcade-controls package already owns
+    // that port — two processes opening the same tty is exactly how you get a game
+    // that reads nothing. So when the facade is present the background thread is
+    // never started, and the readings this class publishes come from
+    // ArcadeInput.HeightA/HeightB instead. Everything downstream (GestureInput and
+    // its thresholds, the debug HUDs, StartScreenController's connected-check)
+    // keeps working through this same class, unchanged.
+    private bool UseArcadeFacade => ArcadeControlsReader.Available;
+
+    // arcade-controls reports a height as 0..1 with BIGGER meaning the hand is
+    // CLOSER to the sensor; GestureInput reads millimetres with SMALLER meaning
+    // closer (<=DownThresholdMm is "hand down", >=UpThresholdMm is "hand up").
+    // Mapping the normalized value onto a 0..300mm span inverts it and lands the
+    // 100/200mm thresholds on even thirds of the stick's travel: near (1.0) -> 0mm
+    // -> hand down, far (0.0) -> 300mm -> hand up, mid (0.5) -> 150mm -> neutral.
+    private const float ArcadeHeightSpanMm = 300f;
+
     private void OnEnable()
     {
+        if (UseArcadeFacade)
+            return; // hub owns the port — see UseArcadeFacade
+
         _stopRequested = false;
         _thread = new Thread(RunLoop) { IsBackground = true, Name = "GestureSensorSerial" };
         _thread.Start();
@@ -71,6 +93,12 @@ public sealed class GestureSensorSerial : MonoBehaviour
 
     private void Update()
     {
+        if (UseArcadeFacade)
+        {
+            ApplyArcadeHeights();
+            return;
+        }
+
         IsConnected = _connected;
 
         lock (_lock)
@@ -86,6 +114,30 @@ public sealed class GestureSensorSerial : MonoBehaviour
             Player2RightMm = _latest[4];
             Player2Brake = _latest[5] != 0;
         }
+    }
+
+    // Both player slots mirror the SAME pair of cabinet sensors on purpose: the
+    // cabinet is a one-player-at-a-time station with a single HeightA/HeightB pair
+    // (the combo board even sends "-1,-1,0" for player 2), while this class's two
+    // slots exist for the author's own two-board rig. Feeding both means whichever
+    // ladybug the menu ends up arming — PlayerRight solo or PlayerLeft in 2-player
+    // mode — reads the cabinet's real hands instead of a dead -1 channel.
+    private void ApplyArcadeHeights()
+    {
+        IsConnected = true;
+
+        int leftMm = Mathf.RoundToInt((1f - ArcadeControlsReader.HeightA) * ArcadeHeightSpanMm);
+        int rightMm = Mathf.RoundToInt((1f - ArcadeControlsReader.HeightB) * ArcadeHeightSpanMm);
+
+        Player1LeftMm = leftMm;
+        Player1RightMm = rightMm;
+        Player2LeftMm = leftMm;
+        Player2RightMm = rightMm;
+
+        // Braking was removed from the game entirely, and the cabinet has no brake
+        // control at all (see the CombinedBoard sketch's own note) — stays false.
+        Player1Brake = false;
+        Player2Brake = false;
     }
 
     private void RunLoop()

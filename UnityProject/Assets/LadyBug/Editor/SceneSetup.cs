@@ -125,19 +125,32 @@ public static class SceneSetup
         CreateStartScreen(playerRight, playerLeft, gestureCanvasLeft, gestureCanvasRight);
         CreatePauseDialog();
         CreateExitGesture();
-        // Loader (attract-mode controller-select) + flower-fill/countdown
-        // intro skipped for now, per feedback — boot straight into the
-        // button-selection menu instead of clicking through both every
-        // single test run. StartScreenCanvas has sat ready underneath them
-        // the whole time regardless (see IntroSequence's own class comment),
-        // so skipping these two just means nothing ever covers it — see
-        // StartScreenController.Awake's own PlayMusic()/OnRevealed() calls,
-        // added to replace what IntroSequence.Finish() used to trigger.
-        // CreateLoaderScreen/CreateAllIntroScreens (below) are left intact,
-        // not deleted — the real cabinet build still needs this real-
-        // controller-hold flow, this is a dev-time skip only.
-        // IntroSequence[] gameIntros = CreateAllIntroScreens();
-        // CreateLoaderScreen(gameIntros);
+        // Loader (attract-mode controller-select) + flower-fill/countdown intro are
+        // NOT built into the scene. The author had already commented these two out as
+        // a dev-time convenience; for the arcade cabinet the cut is permanent and
+        // deliberate, so it is a named switch rather than a commented-out line:
+        // the attract screen and the hold-to-launch flower animation now live in the
+        // shared arcade-hub launcher, which plays them for EVERY one of the 7 games
+        // while its control is held (arcade-hub's HoldToLaunchController was adapted
+        // from IntroSequence). A game that also played its own would show the same
+        // animation twice in a row. Founder decision, 2026-07.
+        //
+        // CreateLoaderScreen/CreateAllIntroScreens and the LoaderScreenController /
+        // IntroSequence scripts are left fully intact below, unreferenced, so this
+        // stays a reversible cut of the author's work: flip the const to build the
+        // standalone attract flow back into the scene.
+        // StartScreenCanvas sits ready underneath regardless (see IntroSequence's own
+        // class comment), so skipping these just means nothing ever covers it — see
+        // StartScreenController.Awake's own PlayMusic()/OnRevealed() calls, which
+        // replaced what IntroSequence.Finish() used to trigger.
+        const bool includeAttractAndIntroScreens = false;
+#pragma warning disable CS0162 // unreachable by design — see the comment above
+        if (includeAttractAndIntroScreens)
+        {
+            IntroSequence[] gameIntros = CreateAllIntroScreens();
+            CreateLoaderScreen(gameIntros);
+        }
+#pragma warning restore CS0162
         CreateScreenInfoLabel();
 
         System.IO.Directory.CreateDirectory("Assets/LadyBug/Scenes");

@@ -44,8 +44,24 @@ public sealed class JoystickSerial : MonoBehaviour
         Instance = this;
     }
 
+    // Arcade cabinet: never open the port here — the hub's arcade-controls package
+    // already owns the one combo board that carries this joystick (see the same
+    // note on GestureSensorSerial). The switch state comes from
+    // ArcadeInput.Joystick instead, so JoystickInput and everything above it are
+    // untouched.
+    private bool UseArcadeFacade => ArcadeControlsReader.Available;
+
+    // The cabinet stick is analog (-1..1 per axis); the author's own firmware
+    // already thresholds its stick into 4 discrete switches before sending it, so
+    // this reader's contract is discrete. Half deflection is the same cut-off the
+    // rest of the arcade port uses.
+    private const float ArcadeAxisThreshold = 0.5f;
+
     private void OnEnable()
     {
+        if (UseArcadeFacade)
+            return; // hub owns the port — see UseArcadeFacade
+
         _stopRequested = false;
         _thread = new Thread(RunLoop) { IsBackground = true, Name = "JoystickSerial" };
         _thread.Start();
@@ -60,6 +76,12 @@ public sealed class JoystickSerial : MonoBehaviour
 
     private void Update()
     {
+        if (UseArcadeFacade)
+        {
+            ApplyArcadeJoystick();
+            return;
+        }
+
         IsConnected = _connected;
 
         lock (_lock)
@@ -73,6 +95,17 @@ public sealed class JoystickSerial : MonoBehaviour
             Left = _latest[2] != 0;
             Right = _latest[3] != 0;
         }
+    }
+
+    private void ApplyArcadeJoystick()
+    {
+        IsConnected = true;
+
+        Vector2 v = ArcadeControlsReader.Joystick;
+        Up = v.y > ArcadeAxisThreshold;
+        Down = v.y < -ArcadeAxisThreshold;
+        Left = v.x < -ArcadeAxisThreshold;
+        Right = v.x > ArcadeAxisThreshold;
     }
 
     private void RunLoop()

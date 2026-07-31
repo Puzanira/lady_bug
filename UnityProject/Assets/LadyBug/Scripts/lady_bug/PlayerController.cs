@@ -208,16 +208,58 @@ public class PlayerController : MonoBehaviour
     // for this player (i.e. keyboard controller selected — behaves exactly
     // as before). A joystick's 4 directions are already discrete presses,
     // so they slot in directly, the same shape the keyboard reads use.
-    private bool UpKeyDown() => GestureActive ? _gestureInput.JumpDown : JoystickActive ? _joystickInput.UpDown : Input.GetKeyDown(upKey);
-    private bool UpKeyHeld() => GestureActive ? _gestureInput.JumpHeld : JoystickActive ? _joystickInput.UpHeld : Input.GetKey(upKey);
-    private bool DownKeyHeld() => GestureActive ? _gestureInput.DuckHeld : JoystickActive ? _joystickInput.DownHeld : Input.GetKey(downKey);
-    private bool LeftKeyDown() => GestureActive ? _gestureInput.LeanLeftDown : JoystickActive ? _joystickInput.LeftDown : Input.GetKeyDown(leftKey);
-    private bool LeftKeyHeld() => GestureActive ? _gestureInput.LeanLeftHeld : JoystickActive ? _joystickInput.LeftHeld : Input.GetKey(leftKey);
-    private bool RightKeyDown() => GestureActive ? _gestureInput.LeanRightDown : JoystickActive ? _joystickInput.RightDown : Input.GetKeyDown(rightKey);
-    private bool RightKeyHeld() => GestureActive ? _gestureInput.LeanRightHeld : JoystickActive ? _joystickInput.RightHeld : Input.GetKey(rightKey);
+    //
+    // The keyboard branch ALSO OR-combines the arcade cabinet's joystick (via
+    // ArcadeControlsReader). In the cabinet the ladybug is steered by the two height
+    // sensors, which arrive through the gesture branch above (GestureSensorSerial is
+    // fed from ArcadeInput.HeightA/HeightB there) — but if a player is left on the
+    // КЛАВИАТУРА selection in the hub, the stick would otherwise reach nothing at
+    // all. OR-ing it in leaves standalone keyboard play unchanged (the reader is a
+    // no-op when arcade-controls is absent) while keeping the cabinet playable in
+    // every menu state. Gesture/joystick modes still take priority when chosen.
+    private bool UpKeyDown() => GestureActive ? _gestureInput.JumpDown : JoystickActive ? _joystickInput.UpDown : (Input.GetKeyDown(upKey) || _arcadeUpDown);
+    private bool UpKeyHeld() => GestureActive ? _gestureInput.JumpHeld : JoystickActive ? _joystickInput.UpHeld : (Input.GetKey(upKey) || _arcadeUpHeld);
+    private bool DownKeyHeld() => GestureActive ? _gestureInput.DuckHeld : JoystickActive ? _joystickInput.DownHeld : (Input.GetKey(downKey) || _arcadeDownHeld);
+    private bool LeftKeyDown() => GestureActive ? _gestureInput.LeanLeftDown : JoystickActive ? _joystickInput.LeftDown : (Input.GetKeyDown(leftKey) || _arcadeLeftDown);
+    private bool LeftKeyHeld() => GestureActive ? _gestureInput.LeanLeftHeld : JoystickActive ? _joystickInput.LeftHeld : (Input.GetKey(leftKey) || _arcadeLeftHeld);
+    private bool RightKeyDown() => GestureActive ? _gestureInput.LeanRightDown : JoystickActive ? _joystickInput.RightDown : (Input.GetKeyDown(rightKey) || _arcadeRightDown);
+    private bool RightKeyHeld() => GestureActive ? _gestureInput.LeanRightHeld : JoystickActive ? _joystickInput.RightHeld : (Input.GetKey(rightKey) || _arcadeRightHeld);
+
+    // Arcade cabinet joystick, sampled once per frame (SampleArcadeInput) so every
+    // wrapper above sees a consistent held/edge state for the frame. Only meaningful
+    // in the hub; standalone the reader returns neutral and these stay false.
+    private const float ArcadeAxisThreshold = 0.5f;
+    private bool _arcadeUpHeld, _arcadeUpDown;
+    private bool _arcadeDownHeld;
+    private bool _arcadeLeftHeld, _arcadeLeftDown;
+    private bool _arcadeRightHeld, _arcadeRightDown;
+
+    // Reduce the cabinet stick to the same up/down/left/right held+edge signals the
+    // keyboard produces. Left/right/up carry a rising edge (lane steps and jumps are
+    // discrete presses); down is a held level (duck), matching the keyboard reads.
+    private void SampleArcadeInput()
+    {
+        Vector2 v = ArcadeControlsReader.Available ? ArcadeControlsReader.Joystick : Vector2.zero;
+
+        bool up = v.y > ArcadeAxisThreshold;
+        _arcadeUpDown = up && !_arcadeUpHeld;
+        _arcadeUpHeld = up;
+
+        _arcadeDownHeld = v.y < -ArcadeAxisThreshold;
+
+        bool left = v.x < -ArcadeAxisThreshold;
+        _arcadeLeftDown = left && !_arcadeLeftHeld;
+        _arcadeLeftHeld = left;
+
+        bool right = v.x > ArcadeAxisThreshold;
+        _arcadeRightDown = right && !_arcadeRightHeld;
+        _arcadeRightHeld = right;
+    }
 
     private void Update()
     {
+        SampleArcadeInput();
+
         switch (_crashState)
         {
             case CrashState.Tumbling:

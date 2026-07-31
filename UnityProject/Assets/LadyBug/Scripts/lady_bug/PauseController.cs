@@ -103,7 +103,11 @@ public class PauseController : MonoBehaviour
         if (confirm)
         {
             if (_confirmYes)
-                SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+                // Reload by buildIndex, not name: in the arcade-hub build lady_bug's
+                // entry scene and Sisyphus's are BOTH named "Main", so LoadScene(name)
+                // resolves to the first "Main" in Build Settings (Sisyphus) and
+                // launches the wrong game. buildIndex is collision-proof.
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
             else
                 CloseDialog();
         }

@@ -147,8 +147,52 @@ public class StartScreenController : MonoBehaviour
     private bool _prevBothUpRight, _prevBothUpLeft;
     private bool _prevDuckRight, _prevDuckLeft;
 
+    // Arcade cabinet menu input: the cabinet joystick navigates this screen and the
+    // GREEN (or RED) action button confirms. Sampled once per Update into rising
+    // edges, since menu steps are discrete. No-op standalone — ArcadeControlsReader
+    // is inert when the arcade-controls package is absent — so keyboard/gesture nav
+    // is unchanged there.
+    private const float ArcadeMenuThreshold = 0.5f;
+    private bool _arcMenuLeft, _arcMenuRight, _arcMenuUp, _arcMenuDown, _arcMenuConfirm;
+    private bool _arcHeldLeft, _arcHeldRight, _arcHeldUp, _arcHeldDown, _arcHeldConfirm;
+
+    private void SampleArcadeMenuInput()
+    {
+        Vector2 v = ArcadeControlsReader.Available ? ArcadeControlsReader.Joystick : Vector2.zero;
+        bool confirmHeld = ArcadeControlsReader.GreenHeld || ArcadeControlsReader.RedHeld;
+
+        bool l = v.x < -ArcadeMenuThreshold;
+        bool r = v.x > ArcadeMenuThreshold;
+        bool u = v.y > ArcadeMenuThreshold;
+        bool d = v.y < -ArcadeMenuThreshold;
+
+        _arcMenuLeft = l && !_arcHeldLeft; _arcHeldLeft = l;
+        _arcMenuRight = r && !_arcHeldRight; _arcHeldRight = r;
+        _arcMenuUp = u && !_arcHeldUp; _arcHeldUp = u;
+        _arcMenuDown = d && !_arcHeldDown; _arcHeldDown = d;
+        _arcMenuConfirm = confirmHeld && !_arcHeldConfirm; _arcHeldConfirm = confirmHeld;
+    }
+
+    // In the cabinet the sensible defaults are not the author's dev defaults: the
+    // station is ONE player (a single HeightA/HeightB pair on one combo board — the
+    // firmware even sends "-1,-1,0" for a second player), and the control that
+    // actually steers the ladybug is those two height sensors, i.e. ДАТЧИКИ. Preselect
+    // both so a player who just walks up and presses GREEN gets a run driven by the
+    // real cabinet hands, instead of a 2-player keyboard game nobody can play.
+    // Both rows stay selectable exactly as before; standalone nothing changes.
+    private void ApplyArcadeDefaults()
+    {
+        if (!ArcadeControlsReader.Available)
+            return;
+
+        _selectedPlayers = 1;
+        _selectedController = 1; // ДАТЧИКИ — reads the cabinet's HeightA/HeightB
+    }
+
     private void Awake()
     {
+        ApplyArcadeDefaults();
+
         // Gameplay stays inert (players unresponsive, road stopped, nothing
         // spawns — SpeedController holds at 0) until a mode is confirmed.
         SetPlayerControlEnabled(playerRight, false);
@@ -219,6 +263,11 @@ public class StartScreenController : MonoBehaviour
 
     private void Update()
     {
+        // Before the screen branches: the trick carousel needs the cabinet confirm
+        // too, and the edge detection has to see EVERY frame or a press made on one
+        // screen leaks as a stale edge onto the next.
+        SampleArcadeMenuInput();
+
         if (trickCarouselCanvasRoot != null && trickCarouselCanvasRoot.activeSelf)
         {
             UpdateTrickCarousel();
@@ -233,11 +282,13 @@ public class StartScreenController : MonoBehaviour
 
         UpdateCarousel();
 
-        bool left = Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A);
-        bool right = Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D);
-        bool up = Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W);
-        bool down = Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S);
-        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return);
+        bool left = Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A) || _arcMenuLeft;
+        bool right = Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D) || _arcMenuRight;
+        bool up = Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W) || _arcMenuUp;
+        bool down = Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S) || _arcMenuDown;
+        // Confirm on the cabinet's GREEN action button (or RED), OR the usual keyboard
+        // keys — so the whole start flow is reachable with the cabinet controls.
+        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || _arcMenuConfirm;
 
         // Gesture nav (works from either player, whichever the keyboard
         // simulator or real sensors are hooked up to): leaning one hand
@@ -402,7 +453,7 @@ public class StartScreenController : MonoBehaviour
     {
         UpdateCarouselGeneric(trickCarouselPages, trickCarouselBackground, ref _lastTrickPage, ref _trickPageDwellElapsed);
 
-        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return);
+        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || _arcMenuConfirm;
         confirm |= IsJumpDown(gestureRight) || IsJumpDown(gestureLeft);
         if (confirm)
         {
@@ -563,32 +614,36 @@ public class StartScreenController : MonoBehaviour
         if (_selectedController == 1)
         {
             bool connected = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
-            if (!connected)
-            {
-                if (notImplementedText != null)
-                {
-                    notImplementedText.gameObject.SetActive(true);
-                    notImplementedText.text = "Датчики не найдены — проверь подключение платы";
-                }
-                return;
-            }
 
             // Player 2's board is separate hardware (see joystickRight) —
             // only needed in 2-player mode, and checked on its own so a
             // missing joystick doesn't get misreported as the (already-
             // connected) hand-sensor board being the problem.
-            if (_selectedPlayers == 2)
+            bool joystickMissing = connected && _selectedPlayers == 2
+                && !(JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected);
+
+            if (!connected || joystickMissing)
             {
-                bool joystickConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
-                if (!joystickConnected)
+                // Arcade-cabinet fallback: with no board attached this used to
+                // dead-end on a "проверь подключение платы" message with no way
+                // forward at all, which blocked playing the game on any machine
+                // without the Arduino hardware — including a dev laptop running the
+                // arcade-hub. Instead of blocking, flip the selection to КЛАВИАТУРА
+                // (row 1, option 0) and say so; the next confirm plays on keyboard.
+                // ДАТЧИКИ still works exactly as before once a board IS connected —
+                // and in the cabinet it always is, because GestureSensorSerial
+                // reports IsConnected from ArcadeInput's height sensors there, so
+                // this branch simply never fires in the hub.
+                _selectedController = 0;
+                UpdateVisuals(); // reflect the switch (also clears any older message)
+                if (notImplementedText != null)
                 {
-                    if (notImplementedText != null)
-                    {
-                        notImplementedText.gameObject.SetActive(true);
-                        notImplementedText.text = "Джойстик игрока 2 не найден — проверь подключение платы";
-                    }
-                    return;
+                    notImplementedText.gameObject.SetActive(true);
+                    notImplementedText.text = joystickMissing
+                        ? "Джойстик игрока 2 не найден — переключено на клавиатуру"
+                        : "Плата не найдена — переключено на клавиатуру";
                 }
+                return;
             }
         }
 
