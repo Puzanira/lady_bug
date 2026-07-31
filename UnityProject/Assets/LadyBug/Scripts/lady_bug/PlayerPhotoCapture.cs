@@ -4,6 +4,9 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Captures a webcam snapshot when a run lands in a leaderboard's top 10 —
 // shown full-screen with a "smile, the camera is taking your picture"
 // countdown, then saved to disk so HighScoreManager can attach it to that
@@ -182,4 +185,5 @@ public class PlayerPhotoCapture : MonoBehaviour
             _webcam = null;
         }
     }
+}
 }

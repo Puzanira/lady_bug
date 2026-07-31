@@ -6,6 +6,9 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Reads the gesture-sensor Arduino (see ArduinoFirmware/GestureSensors) over
 // serial and exposes the latest hand-distance readings and brake-button
 // state for both players. Port I/O runs on a background thread; Update()
@@ -349,4 +352,5 @@ public sealed class GestureSensorSerial : MonoBehaviour
         [DllImport(LibSystem, SetLastError = true)]
         internal static extern int tcflush(int fileDescriptor, int queueSelector);
     }
+}
 }

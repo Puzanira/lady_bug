@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // No more player accel/brake input at all (control scheme redesign removed
 // it everywhere) — the road now always accelerates on its own, and only
 // slows down when a player crashes into something (HalveSpeed).
@@ -149,4 +152,5 @@ public class SpeedController : MonoBehaviour
         if (WinSequence.Instance != null)
             WinSequence.Instance.TryTrigger(DistanceKm);
     }
+}
 }

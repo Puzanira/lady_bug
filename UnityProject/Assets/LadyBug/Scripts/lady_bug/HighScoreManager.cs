@@ -3,6 +3,9 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // 4 independent leaderboards (time to finish, final score, final tricks,
 // peak speed) — top 10 each, saved in PlayerPrefs. The in-game panel cycles
 // through showing the top 3 of one category at a time; ReportRun (called
@@ -280,4 +283,5 @@ public class HighScoreManager : MonoBehaviour
                 return Mathf.RoundToInt(value).ToString();
         }
     }
+}
 }

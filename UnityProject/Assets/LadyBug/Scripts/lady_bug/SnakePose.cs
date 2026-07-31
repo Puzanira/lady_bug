@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Swaps the snake's sprite between a rearing "cobra" pose while idle and a
 // slithering zigzag pose while crossing lanes (LaneWalker.IsMoving) — the
 // one bad object where a genuine pose swap made more sense than the
@@ -50,4 +53,5 @@ public class SnakePose : MonoBehaviour
         _lastMoving = moving;
         _initialized = true;
     }
+}
 }

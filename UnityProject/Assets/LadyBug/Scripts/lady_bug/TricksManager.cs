@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Freestyle-tricks counter for the current session (resets on scene reload).
 public class TricksManager : MonoBehaviour
 {
@@ -78,4 +81,5 @@ public class TricksManager : MonoBehaviour
         if (tricksText != null)
             tricksText.text = _count.ToString();
     }
+}
 }

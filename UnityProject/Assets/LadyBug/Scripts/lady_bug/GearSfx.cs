@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Gear-shift moment gets a one-shot clunk; a looping engine hum's
 // volume/pitch rises through each gear ("нарастание внутри передачи") and
 // drops straight back down the instant it shifts, then starts rising again —
@@ -61,4 +64,5 @@ public class GearSfx : MonoBehaviour
         if (!humSource.isPlaying)
             humSource.Play();
     }
+}
 }

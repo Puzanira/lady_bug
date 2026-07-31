@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // A few living bad objects (dog/cat/crow) drift sideways between lanes at
 // random — eases from the current lane's centre toward a random neighbour's
 // centre, which naturally passes through both lanes' edges along the way,
@@ -94,4 +97,5 @@ public class LaneWalker : MonoBehaviour
     {
         _timer = Random.Range(minDelay, maxDelay);
     }
+}
 }

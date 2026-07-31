@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Animated demo for the "ТРЮК: АРКА" instruction page — replaces a static
 // diagram + caption with a looping mini-sequence: both ladybugs hold their
 // spot, direction arrows appear telling each which way to move, they react
@@ -293,4 +296,5 @@ public class ArchTrickAnimation : MonoBehaviour
 
         arch.gameObject.SetActive(false);
     }
+}
 }

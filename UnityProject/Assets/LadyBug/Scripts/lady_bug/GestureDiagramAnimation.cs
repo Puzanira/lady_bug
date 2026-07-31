@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Animated demo for one gesture-instruction page (CreateGestureDiagramPage):
 // sensors on the bottom half, both hands starting centered in their "beam",
 // then either moving to the gesture's target position and holding (duck/
@@ -298,4 +301,5 @@ public class GestureDiagramAnimation : MonoBehaviour
             yield return new WaitForSeconds(holdReacted);
         }
     }
+}
 }

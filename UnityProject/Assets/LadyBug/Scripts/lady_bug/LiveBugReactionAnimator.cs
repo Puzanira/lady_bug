@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Drives the ТРЕНИРОВКА carousel's "ВАШИ ДЕЙСТВИЯ" bug — a flat RawImage,
 // posed exactly the way GestureDiagramAnimation's own "ОБРАЗЕЦ" bug is (duck
 // = vertical squash, lean = horizontal shift + tilt, flap/jump = rise +
@@ -147,4 +150,5 @@ public class LiveBugReactionAnimator : MonoBehaviour
         float newTilt = Mathf.MoveTowards(currentTilt, targetTilt, leanTiltAngle * 6f * Time.deltaTime);
         rt.localRotation = Quaternion.Euler(0f, 0f, newTilt);
     }
+}
 }

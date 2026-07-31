@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // First screen shown when the game boots — a plain "attract mode" idle
 // screen mimicking a real arcade cabinet: a schematic of the physical
 // control panel at the bottom (see SceneSetup.CreateLoaderScreen) with a
@@ -174,4 +177,5 @@ public class LoaderScreenController : MonoBehaviour
             _activeHighlight.SetActive(false);
         _activeHighlight = null;
     }
+}
 }

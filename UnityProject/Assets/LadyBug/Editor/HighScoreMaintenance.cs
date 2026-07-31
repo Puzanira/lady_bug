@@ -1,6 +1,9 @@
 using UnityEditor;
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // One-off maintenance utility — not part of scene construction (see
 // SceneSetup for that). Keeps each leaderboard's #1 entry but clears ranks
 // 2-3, which mostly accumulated from repeated testing runs rather than
@@ -24,4 +27,5 @@ public static class HighScoreMaintenance
         PlayerPrefs.Save();
         Debug.Log("Trimmed saved high scores down to each category's #1 entry.");
     }
+}
 }

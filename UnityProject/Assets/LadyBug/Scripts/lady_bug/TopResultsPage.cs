@@ -3,6 +3,9 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // One start-screen carousel page: the top 3 for one leaderboard category,
 // each row showing its own photo (see PlayerPhotoCapture/HighScoreManager)
 // if one was ever attached to that specific slot — not just a single photo
@@ -150,4 +153,5 @@ public class TopResultsPage : MonoBehaviour
                 rowArrowHeads[i].SetActive(showPhoto);
         }
     }
+}
 }

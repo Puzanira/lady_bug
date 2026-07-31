@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Shown after the player holds down a control on LoaderScreenController's
 // attract-mode screen: flowers rain down and pile up (bottom row first, see
 // SceneSetup.CreateIntroScreen for the fill order) until the whole screen
@@ -370,4 +373,5 @@ public class IntroSequence : MonoBehaviour
         if (startScreen != null)
             startScreen.OnRevealed();
     }
+}
 }

@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Reads player 2's physical joystick (2-axis analog stick, thresholded into
 // 4 directions by the firmware itself — see ArduinoFirmware/Joystick) over
 // serial via JoystickSerial and turns it into the same held/just-pressed
@@ -44,4 +47,5 @@ public class JoystickInput : MonoBehaviour
         RightDown = right && !RightHeld;
         RightHeld = right;
     }
+}
 }

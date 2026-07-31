@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Pre-game menu: pick 1 or 2 players and confirm with Space/Enter — a
 // neutral key, not tied to either player's own scheme, since nothing is
 // bound to a specific player yet at this point.
@@ -869,4 +872,5 @@ public class StartScreenController : MonoBehaviour
         prev = now;
         return edgeUp;
     }
+}
 }

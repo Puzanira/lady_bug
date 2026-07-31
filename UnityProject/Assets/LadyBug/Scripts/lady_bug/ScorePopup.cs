@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Flies a "+1"/"-1" popup toward the score counter, then applies the score
 // and destroys itself. Both this object and the target share the same
 // (0,0)-anchored, (0,0)-pivot parent, so anchoredPosition is directly
@@ -38,4 +41,5 @@ public class ScorePopup : MonoBehaviour
             Destroy(gameObject);
         }
     }
+}
 }

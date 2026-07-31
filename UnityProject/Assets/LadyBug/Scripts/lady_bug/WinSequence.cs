@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 public class WinSequence : MonoBehaviour
 {
     public static WinSequence Instance { get; private set; }
@@ -772,4 +775,5 @@ public class WinSequence : MonoBehaviour
             yield return null;
         }
     }
+}
 }

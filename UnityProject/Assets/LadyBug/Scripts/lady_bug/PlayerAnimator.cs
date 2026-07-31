@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Two things layered on the same sprite: a procedural tilt (slow while
 // grounded — running legs, faster/smaller while airborne — flapping wings),
 // and a genuine multi-frame pose cycle — one set of frames for the ground
@@ -96,4 +99,5 @@ public class PlayerAnimator : MonoBehaviour
             _spriteRenderer.material.mainTexture = frames[_frameIndex];
         }
     }
+}
 }

@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Flies a "+1 ТРЮК: <name>" popup toward the tricks counter, then applies the
 // trick and destroys itself. Mirrors ScorePopup's fly-then-apply pattern —
 // both this object and the target share the same (0,0)-anchored,
@@ -37,4 +40,5 @@ public class TrickPopup : MonoBehaviour
             Destroy(gameObject);
         }
     }
+}
 }

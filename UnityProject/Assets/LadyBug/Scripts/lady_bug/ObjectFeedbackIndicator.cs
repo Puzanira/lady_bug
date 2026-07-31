@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Right-corner counterpart to SpeedIndicator's own left-corner gear+speed
 // hub (see SceneSetup.CreateScoreUI's "RightHubPlaceholder") — a happy/sad
 // face in the center badge plus a fill/drain animation on its own tick arc,
@@ -99,4 +102,5 @@ public class ObjectFeedbackIndicator : MonoBehaviour
             ticks[i].color = i < lit ? _tickLitColors[i] : dimTickColor;
         }
     }
+}
 }

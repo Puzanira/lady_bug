@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // "X из Y" readout (just the numbers, no "traveled/remaining" wording) —
 // distance travelled is also the win condition now (WinSequence/
 // SpeedController), so this doubles as a progress bar toward the goal.
@@ -25,4 +28,5 @@ public class DistanceIndicator : MonoBehaviour
         // and "км" are just connective units/words.
         distanceText.text = string.Format("{0:0.0}<size=26> км</size>\n<size=26>из</size>\n{1:0}<size=26> км</size>", traveled, targetKm);
     }
+}
 }

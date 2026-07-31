@@ -6,6 +6,9 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Reads player 2's joystick Arduino (see ArduinoFirmware/Joystick) over
 // serial and exposes its latest up/down/left/right switch state. Same
 // approach as GestureSensorSerial (background-thread port I/O, macOS
@@ -336,4 +339,5 @@ public sealed class JoystickSerial : MonoBehaviour
         [DllImport(LibSystem, SetLastError = true)]
         internal static extern int tcflush(int fileDescriptor, int queueSelector);
     }
+}
 }

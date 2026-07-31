@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Converts a world position to the (0,0)-anchored canvas coordinates shared
 // by all UI popups (matches the 1920x1080 reference resolution every canvas
 // uses), so a popup can spawn at a specific player's on-screen position
@@ -16,4 +19,5 @@ public static class ScreenSpaceUtil
             screenPoint.x * (1920f / Screen.width),
             screenPoint.y * (1080f / Screen.height));
     }
+}
 }

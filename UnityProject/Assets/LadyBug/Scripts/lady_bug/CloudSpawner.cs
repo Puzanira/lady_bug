@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Spawns ambient background clouds at a random high altitude/x, always
 // drifting (not gated on the game running) — pure atmosphere, same spirit
 // as the good pickups that drift by on the start screen.
@@ -51,4 +54,5 @@ public class CloudSpawner : MonoBehaviour
         Vector3 pos = new Vector3(Random.Range(minX, maxX), Random.Range(minY, maxY), spawnZ);
         Instantiate(prefab, pos, prefab.transform.rotation);
     }
+}
 }

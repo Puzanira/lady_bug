@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+namespace LadyBug
+{
+
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private int laneCount = 3;
@@ -1024,4 +1027,5 @@ public class PlayerController : MonoBehaviour
             }
         }
     }
+}
 }

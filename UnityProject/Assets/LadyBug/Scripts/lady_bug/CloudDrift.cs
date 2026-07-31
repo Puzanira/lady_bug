@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Ambient sky element — drifts toward the camera at its own fixed slow pace,
 // independent of SpeedController, so clouds keep sailing by even before the
 // game starts (unlike MovingEntity, which stops when road speed is zero).
@@ -38,4 +41,5 @@ public class CloudDrift : MonoBehaviour
         if (pos.z < destroyZ)
             Destroy(gameObject);
     }
+}
 }

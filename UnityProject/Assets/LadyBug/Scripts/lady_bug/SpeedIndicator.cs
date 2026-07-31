@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Combined speed/gear HUD hub (top-left fan, see SceneSetup.CreateScoreUI) —
 // the gear number sits in the center as a plain digit; speed within the
 // current gear (0..GearStepKmh) lights up a curved row of tick dots around
@@ -97,4 +100,5 @@ public class SpeedIndicator : MonoBehaviour
         rt.localScale = baseScale;
         _shiftRoutine = null;
     }
+}
 }

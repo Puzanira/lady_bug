@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+namespace LadyBug
+{
+
 // Reads two downward-facing distance sensors per player (one over each
 // hand) and turns them into the same virtual signals PlayerController
 // normally reads from keys. Two sources: real hardware via
@@ -298,4 +301,5 @@ public class GestureInput : MonoBehaviour
             _swingTimes.RemoveAll(t => Time.time - t > Window);
         }
     }
+}
 }

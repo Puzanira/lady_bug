@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 // Keeps the start screen's "проехать N км" goal line in sync with
 // WinSequence's actual win distance, which is temporarily lowered for
 // faster debug/test runs — a hardcoded "100 км" in the instructions would
@@ -16,4 +19,5 @@ public class GoalDistanceLabel : MonoBehaviour
 
         label.text = "проехать " + WinSequence.Instance.WinDistanceKm.ToString("0") + " км";
     }
+}
 }

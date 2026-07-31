@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
+namespace LadyBug
+{
+
 public static class SceneSetup
 {
     const int LaneCount = 4;
@@ -6102,4 +6105,5 @@ public static class SceneSetup
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
     }
+}
 }

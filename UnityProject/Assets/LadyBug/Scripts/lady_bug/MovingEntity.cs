@@ -1,5 +1,8 @@
 using UnityEngine;
 
+namespace LadyBug
+{
+
 public class MovingEntity : MonoBehaviour
 {
     [SerializeField] private float destroyZ = -10f;
@@ -12,4 +15,5 @@ public class MovingEntity : MonoBehaviour
         if (transform.position.z < destroyZ)
             Destroy(gameObject);
     }
+}
 }
