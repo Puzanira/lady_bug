@@ -19,3 +19,7 @@ UnityProject/*.unityproj
 
 # OS cruft
 .DS_Store
+
+# Legacy baked shoulder tint — runtime uses ShoulderTint.shader instead
+UnityProject/Assets/LadyBug/Sprites/lady_bug/ShoulderTileVariants.png
+UnityProject/Assets/LadyBug/Sprites/lady_bug/ShoulderTileVariants.png.meta

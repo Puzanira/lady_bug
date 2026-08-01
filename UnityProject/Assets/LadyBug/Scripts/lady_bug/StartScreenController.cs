@@ -23,10 +23,8 @@ public class StartScreenController : MonoBehaviour
 
     [SerializeField] private Image controller1Bg;
     [SerializeField] private Image controller2Bg;
-    [SerializeField] private Image controller3Bg;
     [SerializeField] private Text controller1Text;
     [SerializeField] private Text controller2Text;
-    [SerializeField] private Text controller3Text;
     [SerializeField] private Outline controllerRowOutline;
     [SerializeField] private Image controllerRowBg;
 
@@ -115,13 +113,18 @@ public class StartScreenController : MonoBehaviour
     private static readonly Color RowFocusColor = new Color(1f, 0.85f, 0.15f, 0.22f);
     private static readonly Color RowIdleColor = new Color(1f, 1f, 1f, 0.05f);
 
-    private const int RowCount = 3; // 0 = player count, 1 = controller type, 2 = start button
-    private const int ControllerCount = 3; // 0 = keyboard, 1 = distance sensors, 2 = sensor simulator
+    // Set false in production cabinet builds — hides the whole keyboard/sensors
+    // row and forces real distance sensors (see SceneSetup.ShowControllerSelectionRow).
+    private const bool ShowControllerSelectionRow = true;
+    private int RowCount => ShowControllerSelectionRow ? 3 : 2; // 0 = players, 1 = controller (optional), last = start
+    private const int ControllerCount = 2; // 0 = keyboard, 1 = distance sensors
 
     private int _selectedPlayers = 2;
-    private int _selectedController; // 0 = keyboard, 1 = distance sensors, 2 = simulator
+    private int _selectedController; // 0 = keyboard, 1 = distance sensors
     private int _selectedStartOption; // 0 = СТАРТ, 1 = ТРЕНИРОВКА
     private int _row;
+
+    private int StartRowIndex => ShowControllerSelectionRow ? 2 : 1;
 
     // TEMPORARY, for faster debug/test cycling — revert to 10f for real play.
     // Floor for every page's dwell time — animated pages (arch/ring trick,
@@ -214,6 +217,9 @@ public class StartScreenController : MonoBehaviour
             gestureCanvasLeft.SetActive(false);
 
         RestoreMenuGestureMode();
+
+        if (!ShowControllerSelectionRow)
+            _selectedController = 1;
 
         UpdateVisuals();
         UpdateCarousel();
@@ -308,12 +314,12 @@ public class StartScreenController : MonoBehaviour
             {
                 _selectedPlayers = _selectedPlayers == 1 ? 2 : 1;
             }
-            else if (_row == 1)
+            else if (_row == 1 && ShowControllerSelectionRow)
             {
                 int delta = right ? 1 : -1;
                 _selectedController = (_selectedController + delta + ControllerCount) % ControllerCount;
             }
-            else if (_row == 2)
+            else if (_row == StartRowIndex)
             {
                 _selectedStartOption = _selectedStartOption == 0 ? 1 : 0;
             }
@@ -331,7 +337,7 @@ public class StartScreenController : MonoBehaviour
             UpdateVisuals();
         }
 
-        if (confirm && _row == 2)
+        if (confirm && _row == StartRowIndex)
         {
             if (_selectedStartOption == 0)
                 BeginGame();
@@ -403,23 +409,21 @@ public class StartScreenController : MonoBehaviour
         // on this same menu, and never react to anything. No hardware-
         // connection check here, unlike BeginGame — a practice screen
         // shouldn't refuse entry just because a board isn't plugged in yet.
-        bool gestureActive = _selectedController == 1 || _selectedController == 2;
+        bool gestureActive = _selectedController == 1;
         bool useRealSensors = _selectedController == 1;
-        if (_selectedPlayers == 2)
+        if (_selectedController == 1)
         {
-            if (_selectedController == 1)
-            {
-                // Real hardware: player 1 (left) reads distance sensors —
-                // see joystickRight's own comment for player 2's side.
-                SetGestureEnabled(gestureLeft, true, true);
-                SetJoystickEnabled(joystickLeft, false);
-            }
-            else
-            {
-                SetGestureEnabled(gestureLeft, gestureActive, useRealSensors);
-                SetJoystickEnabled(joystickLeft, false);
-            }
+            // Player 1 (left) always reads real hand sensors in sensor mode,
+            // including solo play — see joystickRight for player 2's side.
+            SetGestureEnabled(gestureLeft, true, true);
+            SetJoystickEnabled(joystickLeft, false);
         }
+        else
+        {
+            SetGestureEnabled(gestureLeft, false, false);
+            SetJoystickEnabled(joystickLeft, false);
+        }
+
         if (_selectedController == 1 && _selectedPlayers == 2)
         {
             // "Датчики" for player 2 means their own joystick board, not a
@@ -566,32 +570,27 @@ public class StartScreenController : MonoBehaviour
 
         bool keyboardSelected = _selectedController == 0;
         bool sensorsSelected = _selectedController == 1;
-        bool simulatorSelected = _selectedController == 2;
         if (controller1Bg != null)
             controller1Bg.color = keyboardSelected ? SelectedColor : UnselectedColor;
         if (controller2Bg != null)
             controller2Bg.color = sensorsSelected ? SelectedColor : UnselectedColor;
-        if (controller3Bg != null)
-            controller3Bg.color = simulatorSelected ? SelectedColor : UnselectedColor;
         if (controller1Text != null)
             controller1Text.text = (keyboardSelected ? "[X] " : "[ ] ") + "КЛАВИАТУРА";
         if (controller2Text != null)
             controller2Text.text = (sensorsSelected ? "[X] " : "[ ] ") + "ДАТЧИКИ";
-        if (controller3Text != null)
-            controller3Text.text = (simulatorSelected ? "[X] " : "[ ] ") + "ИМИТАТОР";
 
         if (optionsRowOutline != null)
             optionsRowOutline.effectColor = _row == 0 ? FocusOutline : IdleOutline;
         if (optionsRowBg != null)
             optionsRowBg.color = _row == 0 ? RowFocusColor : RowIdleColor;
         if (controllerRowOutline != null)
-            controllerRowOutline.effectColor = _row == 1 ? FocusOutline : IdleOutline;
+            controllerRowOutline.effectColor = ShowControllerSelectionRow && _row == 1 ? FocusOutline : IdleOutline;
         if (controllerRowBg != null)
-            controllerRowBg.color = _row == 1 ? RowFocusColor : RowIdleColor;
+            controllerRowBg.color = ShowControllerSelectionRow && _row == 1 ? RowFocusColor : RowIdleColor;
         if (startOutline != null)
-            startOutline.effectColor = _row == 2 ? FocusOutline : IdleOutline;
+            startOutline.effectColor = _row == StartRowIndex ? FocusOutline : IdleOutline;
         if (startRowBg != null)
-            startRowBg.color = _row == 2 ? RowFocusColor : RowIdleColor;
+            startRowBg.color = _row == StartRowIndex ? RowFocusColor : RowIdleColor;
 
         bool startSelected = _selectedStartOption == 0;
         if (startBg != null)
@@ -613,14 +612,23 @@ public class StartScreenController : MonoBehaviour
     {
         if (_selectedController == 1)
         {
-            bool connected = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
+            bool sensorsConnected = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
+            // A combined board (ArduinoFirmware/CombinedBoard) identifies itself as
+            // a plain joystick and carries player 1's 2 sensors alongside it instead
+            // of a separate dedicated board (see JoystickSerial's own comment) —
+            // counts as "sensors connected" too, since there's no separate
+            // GestureSensorSerial connection to check in that setup. The arcade
+            // cabinet IS a combined board, and both readers report IsConnected there
+            // off ArcadeInput's heights/stick, so either half satisfies this.
+            bool combinedBoardConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
+            bool connected = sensorsConnected || combinedBoardConnected;
 
-            // Player 2's board is separate hardware (see joystickRight) —
-            // only needed in 2-player mode, and checked on its own so a
-            // missing joystick doesn't get misreported as the (already-
-            // connected) hand-sensor board being the problem.
-            bool joystickMissing = connected && _selectedPlayers == 2
-                && !(JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected);
+            // Player 2's joystick: on a combined board it rides the same port as
+            // player 1's sensors, so it is there by definition — only the
+            // two-separate-boards setup can be missing it. Checked on its own so a
+            // missing joystick doesn't get misreported as the (already-connected)
+            // hand-sensor board being the problem.
+            bool joystickMissing = connected && _selectedPlayers == 2 && !combinedBoardConnected;
 
             if (!connected || joystickMissing)
             {
@@ -647,7 +655,7 @@ public class StartScreenController : MonoBehaviour
             }
         }
 
-        bool gestureActive = _selectedController == 1 || _selectedController == 2;
+        bool gestureActive = _selectedController == 1;
         bool useRealSensors = _selectedController == 1;
 
         // playerLeft's active state already reflects the selection (toggled

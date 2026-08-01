@@ -17,13 +17,25 @@ public class BigArchSpawner : MonoBehaviour
     private float _timer;
     private float _nextInterval;
 
+    private void Awake()
+    {
+        if (DebugRunConfig.EmptyRoad)
+            enabled = false;
+    }
+
     private void Start()
     {
+        if (DebugRunConfig.EmptyRoad)
+            return;
+
         ScheduleNext();
     }
 
     private void Update()
     {
+        if (DebugRunConfig.EmptyRoad)
+            return;
+
         bool gameRunning = SpeedController.Instance != null && SpeedController.Instance.IsRunning;
         if (!gameRunning || prefab == null)
             return;

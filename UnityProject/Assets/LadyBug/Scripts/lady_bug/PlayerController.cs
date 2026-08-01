@@ -62,7 +62,6 @@ public class PlayerController : MonoBehaviour
     private float _lastMoveTime = -999f;
     private bool _lastMoveWasAirborne;
     private static float _lastRingTrickTime = -999f;
-    private const float RingTrickWindow = 0.5f;
     private const float RingTrickCooldown = 0.3f;
 
     // Shared move-history log, used by the 4 multi-step tricks below
@@ -76,9 +75,9 @@ public class PlayerController : MonoBehaviour
         public int fromLane;
         public int toLane;
         public bool airborne; // this player's own IsAirborne at the moment of this specific step
+        public bool wasBouncing; // Bouncing on a partner's back, not a solo jump
     }
     private readonly List<MoveEvent> _moveHistory = new List<MoveEvent>();
-    private const float MoveHistoryWindow = 6f;
 
     // Every multi-step trick below (ЧЕХАРДА/СИНХРОН/БОЛЬШОЕ КОЛЬЦО/
     // БЕСКОНЕЧНОСТЬ) is defined relative to a 3-lane WINDOW — edge/edge/
@@ -107,6 +106,8 @@ public class PlayerController : MonoBehaviour
 
     private static float _lastSyncTrickTime = -999f;
     private const float SyncTrickCooldown = 0.3f;
+    // Max gap between matching lane steps on the two players — "together"
+    // input, not one player dragging the stack alone via CarryBouncingRiders.
     private static float _lastBigRingTrickTime = -999f;
     private const float BigRingTrickCooldown = 0.3f;
     private static float _lastInfinityTrickTime = -999f;
@@ -117,7 +118,6 @@ public class PlayerController : MonoBehaviour
     // reads Normal for a brief moment while a just-ended jump is still
     // easing back down to the road — see UpdateHoverTrickTracking).
     private float _noGroundTimer;
-    private const float HoverTrickDuration = 5f;
     private static bool _hoverTrickAwardedThisStreak;
 
     // Bouncing = landed mid-air on top of another (grounded) player sharing
@@ -189,6 +189,11 @@ public class PlayerController : MonoBehaviour
         transform.position = pos;
     }
 
+    private void Awake()
+    {
+        jumpDuration = DebugRunConfig.JumpDuration;
+    }
+
     private void Start()
     {
         _currentLane = startLane >= 0 ? startLane : laneCount / 2;
@@ -255,6 +260,13 @@ public class PlayerController : MonoBehaviour
         _arcadeRightDown = right && !_arcadeRightHeld;
         _arcadeRightHeld = right;
     }
+
+    // PauseController reads these while gameplay on this player is disabled —
+    // same gesture/joystick/keyboard sources as HandleInput, so either active
+    // player's own scheme can drive the quit dialog.
+    public bool ReadLeanLeftDown() => LeftKeyDown();
+    public bool ReadLeanRightDown() => RightKeyDown();
+    public bool ReadJumpDown() => UpKeyDown();
 
     private void Update()
     {
@@ -412,12 +424,43 @@ public class PlayerController : MonoBehaviour
 
     private bool IsSupportingBouncingPartner()
     {
+        return FindBouncingRiderOnBack() != null;
+    }
+
+    // Grounded player carrying a Bouncing rider — used by СИНХРОН detection
+    // and to block jumping out from under them. Looks up who is actually
+    // resting on this player's back, not just who shares a lane index (the
+    // rider's _currentLane lags until CarryBouncingRiders runs).
+    private PlayerController FindBouncingRiderOnBack()
+    {
         foreach (var other in FindObjectsByType<PlayerController>())
         {
-            if (other != this && other.CurrentLane == _currentLane && other._verticalState == VerticalState.Bouncing)
-                return true;
+            if (other == this || !other.IsBouncing)
+                continue;
+            if (other.FindLandingBlocker(other._currentLane) == this)
+                return other;
         }
-        return false;
+        return null;
+    }
+
+    // When the grounded base of a stack changes lanes, the rider stays
+    // physically on top but their own _currentLane was never updated —
+    // that desync is exactly why СИНХРОН only registered on some sweeps.
+    private void CarryBouncingRiders(int fromLane, int toLane)
+    {
+        if (IsAirborne)
+            return;
+
+        foreach (var other in FindObjectsByType<PlayerController>())
+        {
+            if (other == this || !other.IsBouncing)
+                continue;
+            if (other._currentLane != fromLane)
+                continue;
+            if (other.FindLandingBlocker(fromLane) != this)
+                continue;
+            other._currentLane = toLane;
+        }
     }
 
     private Vector3 Midpoint(PlayerController other) => (transform.position + other.transform.position) / 2f;
@@ -519,6 +562,7 @@ public class PlayerController : MonoBehaviour
             // straight down into the same spot we just left.
             if (UpKeyDown() && !IsSupportingBouncingPartner())
             {
+                jumpDuration = DebugRunConfig.JumpDuration;
                 _verticalState = VerticalState.Jumping;
                 _actionTimer = jumpDuration;
             }
@@ -546,7 +590,7 @@ public class PlayerController : MonoBehaviour
             {
                 EndJump();
             }
-            else if (!GestureActive)
+            else if (!GestureActive && !DebugRunConfig.JumpUntilTimerExpires)
             {
                 // Held up to the jumpDuration cap (enforced in UpdateVerticalState);
                 // release early and it comes down immediately — unless someone's
@@ -620,13 +664,23 @@ public class PlayerController : MonoBehaviour
         int previousLane = _currentLane;
         _currentLane = target;
 
+        if (!IsAirborne)
+            CarryBouncingRiders(previousLane, target);
+
         _lastMoveFromLane = previousLane;
         _lastMoveToLane = target;
         _lastMoveTime = Time.time;
         _lastMoveWasAirborne = IsAirborne;
 
-        _moveHistory.Add(new MoveEvent { time = Time.time, fromLane = previousLane, toLane = target, airborne = IsAirborne });
-        _moveHistory.RemoveAll(e => Time.time - e.time > MoveHistoryWindow);
+        _moveHistory.Add(new MoveEvent
+        {
+            time = Time.time,
+            fromLane = previousLane,
+            toLane = target,
+            airborne = IsAirborne,
+            wasBouncing = _verticalState == VerticalState.Bouncing
+        });
+        _moveHistory.RemoveAll(e => Time.time - e.time > DebugRunConfig.MoveHistoryWindow);
 
         if (_verticalState == VerticalState.Bouncing)
             TryRecordStackDismount(previousLane);
@@ -665,7 +719,7 @@ public class PlayerController : MonoBehaviour
         bool bothAirborne = last.airborne && prev.airborne;
         bool sameDirection = (last.toLane - last.fromLane) == (prev.toLane - prev.fromLane);
         bool spansBothEdges = Mathf.Abs(last.toLane - prev.fromLane) == TrickFullSpan;
-        bool closeInTime = last.time - prev.time < 0.6f;
+        bool closeInTime = last.time - prev.time < DebugRunConfig.TrickStepMaxGap;
         if (!(bothAirborne && sameDirection && spansBothEdges && closeInTime))
             return;
 
@@ -675,7 +729,7 @@ public class PlayerController : MonoBehaviour
                 continue;
 
             bool dismountMatches = other._stackDismountFromLane == prev.fromLane &&
-                Time.time - other._stackDismountTime < 3f;
+                Time.time - other._stackDismountTime < DebugRunConfig.LeapfrogDismountWindow;
             if (dismountMatches)
             {
                 _lastLeapfrogTrickTime = Time.time;
@@ -686,30 +740,16 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // СИНХРОН — the grounded "base" of a stack (Bouncing rider still on
-    // their back) does the same clean 2-lane sweep ЧЕХАРДА's bottom half
-    // does, except this time the rider stays put, riding along instead of
-    // dismounting — confirmed by finding them still specifically Bouncing
-    // (not just any airborne state — a coincidental solo jump landing in
-    // the same lane at the same moment shouldn't count) and co-located
-    // right after this move completes.
+    // СИНХРОН — stacked pair, both players each press the same direction
+    // twice in a row (< 0.6s apart per player), sweeping a 3-lane window
+    // edge-to-edge, still Bouncing on each other at the end. Both move
+    // histories must match — one player driving alone doesn't count even
+    // if CarryBouncingRiders dragged the rider's lane index along.
     private void TryDetectSyncTrick()
     {
         if (Time.time - _lastSyncTrickTime < SyncTrickCooldown)
             return;
-        if (IsAirborne) // only the grounded base half of the stack checks this
-            return;
-        if (_moveHistory.Count < 2)
-            return;
-
-        MoveEvent last = _moveHistory[_moveHistory.Count - 1];
-        MoveEvent prev = _moveHistory[_moveHistory.Count - 2];
-
-        bool bothGrounded = !last.airborne && !prev.airborne;
-        bool sameDirection = (last.toLane - last.fromLane) == (prev.toLane - prev.fromLane);
-        bool spansBothEdges = Mathf.Abs(last.toLane - prev.fromLane) == TrickFullSpan;
-        bool closeInTime = last.time - prev.time < 0.6f;
-        if (!(bothGrounded && sameDirection && spansBothEdges && closeInTime))
+        if (!TryGetTwoStepLaneSweep(out MoveEvent prev, out MoveEvent last))
             return;
 
         foreach (var other in FindObjectsByType<PlayerController>())
@@ -717,14 +757,64 @@ public class PlayerController : MonoBehaviour
             if (other == this)
                 continue;
 
-            if (other.IsBouncing && other.CurrentLane == CurrentLane)
-            {
-                _lastSyncTrickTime = Time.time;
-                if (TricksManager.Instance != null)
-                    TricksManager.Instance.SpawnPopup("СИНХРОН", Midpoint(other));
-                return;
-            }
+            if (!IsStackedWith(other))
+                continue;
+            if (!PartnerMatchesSyncSweep(other, prev, last))
+                continue;
+
+            _lastSyncTrickTime = Time.time;
+            if (TricksManager.Instance != null)
+                TricksManager.Instance.SpawnPopup("СИНХРОН", Midpoint(other));
+            return;
         }
+    }
+
+    // Shared by СИНХРОН (and similar tricks): last two lane changes, same
+    // direction, spanning TrickFullSpan lanes total, quick enough locally.
+    private bool TryGetTwoStepLaneSweep(out MoveEvent prev, out MoveEvent last)
+    {
+        prev = default;
+        last = default;
+        if (_moveHistory.Count < 2)
+            return false;
+
+        last = _moveHistory[_moveHistory.Count - 1];
+        prev = _moveHistory[_moveHistory.Count - 2];
+
+        bool sameDirection = (last.toLane - last.fromLane) == (prev.toLane - prev.fromLane);
+        bool spansBothEdges = Mathf.Abs(last.toLane - prev.fromLane) == TrickFullSpan;
+        bool closeInTime = last.time - prev.time < DebugRunConfig.TrickStepMaxGap;
+        return sameDirection && spansBothEdges && closeInTime && (last.toLane - last.fromLane) != 0;
+    }
+
+    private bool PartnerMatchesSyncSweep(PlayerController partner, MoveEvent prev, MoveEvent last)
+    {
+        if (partner._moveHistory.Count < 2)
+            return false;
+
+        MoveEvent pLast = partner._moveHistory[partner._moveHistory.Count - 1];
+        MoveEvent pPrev = partner._moveHistory[partner._moveHistory.Count - 2];
+
+        if (pPrev.fromLane != prev.fromLane || pPrev.toLane != prev.toLane)
+            return false;
+        if (pLast.fromLane != last.fromLane || pLast.toLane != last.toLane)
+            return false;
+
+        if (Mathf.Abs(pPrev.time - prev.time) > DebugRunConfig.SyncPartnerMoveTolerance)
+            return false;
+        if (Mathf.Abs(pLast.time - last.time) > DebugRunConfig.SyncPartnerMoveTolerance)
+            return false;
+
+        return true;
+    }
+
+    private bool IsStackedWith(PlayerController other)
+    {
+        if (other.IsBouncing && other.FindLandingBlocker(other._currentLane) == this)
+            return true;
+        if (IsBouncing && FindLandingBlocker(_currentLane) == other)
+            return true;
+        return false;
     }
 
     // БОЛЬШОЕ КОЛЬЦО — this player's own last 4 lane moves form a there-
@@ -747,13 +837,75 @@ public class PlayerController : MonoBehaviour
         bool chained = g1.toLane == g2.fromLane && a1.fromLane == g2.toLane && a2.fromLane == a1.toLane;
         bool groundSweep = Mathf.Abs(g2.toLane - g1.fromLane) == TrickFullSpan;
         bool airSweep = a2.toLane == g1.fromLane; // back where it started
-        bool closeInTime = a2.time - g1.time < 3f;
+        bool closeInTime = a2.time - g1.time < DebugRunConfig.BigRingPatternWindow;
 
         if (groundLeg && airLeg && chained && groundSweep && airSweep && closeInTime)
         {
             endTime = a2.time;
             return true;
         }
+        return false;
+    }
+
+    // True while this player is mid БОЛЬШОЕ КОЛЬЦО — suppresses false КОЛЬЦО.
+    private bool IsInBigRingSequence()
+    {
+        if (HasBigRingPattern(out _))
+            return true;
+
+        if (_moveHistory.Count >= 3)
+        {
+            int n = _moveHistory.Count;
+            MoveEvent g1 = _moveHistory[n - 3];
+            MoveEvent g2 = _moveHistory[n - 2];
+            MoveEvent a1 = _moveHistory[n - 1];
+            bool groundLeg = !g1.airborne && !g2.airborne;
+            bool chained = g1.toLane == g2.fromLane && a1.fromLane == g2.toLane;
+            bool groundSweep = Mathf.Abs(g2.toLane - g1.fromLane) == TrickFullSpan;
+            if (groundLeg && chained && groundSweep && a1.airborne &&
+                Time.time - g1.time < DebugRunConfig.BigRingPatternWindow)
+                return true;
+        }
+
+        if (_moveHistory.Count >= 2)
+        {
+            int n = _moveHistory.Count;
+            MoveEvent g1 = _moveHistory[n - 2];
+            MoveEvent g2 = _moveHistory[n - 1];
+            if (!g1.airborne && !g2.airborne && g1.toLane == g2.fromLane &&
+                Mathf.Abs(g2.toLane - g1.fromLane) == TrickFullSpan &&
+                Time.time - g1.time < DebugRunConfig.BigRingPatternWindow)
+                return true;
+        }
+
+        return false;
+    }
+
+    // Narrower window for ЗАВИСАНИЕ — only while a multi-step trick is
+    // actively being chained, not because old tail moves still match.
+    private bool IsInActiveBigRingSequence()
+    {
+        if (_moveHistory.Count >= 4 && HasBigRingPattern(out _))
+        {
+            MoveEvent a2 = _moveHistory[_moveHistory.Count - 1];
+            if (a2.airborne && Time.time - a2.time <= DebugRunConfig.MultiStepTrickActiveWindow)
+                return true;
+        }
+
+        if (_moveHistory.Count >= 3)
+        {
+            int n = _moveHistory.Count;
+            MoveEvent g1 = _moveHistory[n - 3];
+            MoveEvent g2 = _moveHistory[n - 2];
+            MoveEvent a1 = _moveHistory[n - 1];
+            bool groundLeg = !g1.airborne && !g2.airborne;
+            bool chained = g1.toLane == g2.fromLane && a1.fromLane == g2.toLane;
+            bool groundSweep = Mathf.Abs(g2.toLane - g1.fromLane) == TrickFullSpan;
+            if (groundLeg && chained && groundSweep && a1.airborne &&
+                Time.time - a1.time <= DebugRunConfig.MultiStepTrickActiveWindow)
+                return true;
+        }
+
         return false;
     }
 
@@ -769,7 +921,7 @@ public class PlayerController : MonoBehaviour
             if (other == this)
                 continue;
 
-            if (other.HasBigRingPattern(out float otherEnd) && Mathf.Abs(myEnd - otherEnd) < 2f)
+            if (other.HasBigRingPattern(out float otherEnd) && Mathf.Abs(myEnd - otherEnd) < DebugRunConfig.BigRingPartnerSyncWindow)
             {
                 _lastBigRingTrickTime = Time.time;
                 if (TricksManager.Instance != null)
@@ -803,12 +955,125 @@ public class PlayerController : MonoBehaviour
         bool ret1 = a1.airborne && a1.fromLane == g1.toLane && a1.toLane == mid;
         bool leg2 = !g2.airborne && g2.fromLane == mid && Mathf.Abs(g2.toLane - mid) == TrickHalfSpan && g2.toLane != g1.toLane;
         bool ret2 = a2.airborne && a2.fromLane == g2.toLane && a2.toLane == mid;
-        bool closeInTime = a2.time - g1.time < 6f;
+        bool closeInTime = a2.time - g1.time < DebugRunConfig.InfinityPatternWindow;
 
         if (leg1 && ret1 && leg2 && ret2 && closeInTime)
         {
             endTime = a2.time;
             return true;
+        }
+        return false;
+    }
+
+    // includeAirborneGap: the g1→a1 / g2→a2 jump before the mid-air lane
+    // change is logged — needed to block false КОЛЬЦО, but too loose for
+    // ЗАВИСАНИЕ (any recent 1-lane step + jump would match).
+    private bool IsInInfinitySequence(bool includeAirborneGap = true)
+    {
+        if (HasInfinityPattern(out _))
+            return true;
+
+        if (_moveHistory.Count >= 3)
+        {
+            int n = _moveHistory.Count;
+            MoveEvent g1 = _moveHistory[n - 3];
+            MoveEvent a1 = _moveHistory[n - 2];
+            MoveEvent g2 = _moveHistory[n - 1];
+            int mid = g1.fromLane;
+            bool leg1 = !g1.airborne && Mathf.Abs(g1.toLane - mid) == TrickHalfSpan;
+            bool ret1 = a1.airborne && a1.fromLane == g1.toLane && a1.toLane == mid;
+            bool leg2 = !g2.airborne && g2.fromLane == mid && Mathf.Abs(g2.toLane - mid) == TrickHalfSpan;
+            if (leg1 && ret1 && leg2 &&
+                Time.time - g1.time < DebugRunConfig.InfinityPatternWindow)
+                return true;
+        }
+
+        if (_moveHistory.Count >= 2)
+        {
+            int n = _moveHistory.Count;
+            MoveEvent g1 = _moveHistory[n - 2];
+            MoveEvent a1 = _moveHistory[n - 1];
+            int mid = g1.fromLane;
+            bool leg1 = !g1.airborne && Mathf.Abs(g1.toLane - mid) == TrickHalfSpan;
+            bool ret1 = a1.airborne && a1.fromLane == g1.toLane && a1.toLane == mid;
+            if (leg1 && ret1 &&
+                Time.time - g1.time < DebugRunConfig.InfinityPatternWindow)
+                return true;
+        }
+
+        if (!includeAirborneGap)
+            return false;
+
+        // Jump bridging g1→a1 or g2→a2 — lane change not logged yet.
+        if (_moveHistory.Count >= 1 && IsAirborne)
+        {
+            MoveEvent last = _moveHistory[_moveHistory.Count - 1];
+            int mid = _moveHistory.Count >= 3 ? _moveHistory[_moveHistory.Count - 3].fromLane : last.fromLane;
+            if (!last.airborne && last.fromLane == mid && Mathf.Abs(last.toLane - mid) == TrickHalfSpan &&
+                Time.time - last.time < DebugRunConfig.InfinityPatternWindow)
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool IsInActiveInfinitySequence()
+    {
+        if (_moveHistory.Count >= 4 && HasInfinityPattern(out _))
+        {
+            MoveEvent a2 = _moveHistory[_moveHistory.Count - 1];
+            if (a2.airborne && Time.time - a2.time <= DebugRunConfig.MultiStepTrickActiveWindow)
+                return true;
+        }
+
+        if (_moveHistory.Count >= 3)
+        {
+            int n = _moveHistory.Count;
+            MoveEvent g1 = _moveHistory[n - 3];
+            MoveEvent a1 = _moveHistory[n - 2];
+            MoveEvent g2 = _moveHistory[n - 1];
+            int mid = g1.fromLane;
+            bool leg1 = !g1.airborne && Mathf.Abs(g1.toLane - mid) == TrickHalfSpan;
+            bool ret1 = a1.airborne && a1.fromLane == g1.toLane && a1.toLane == mid;
+            bool leg2 = !g2.airborne && g2.fromLane == mid && Mathf.Abs(g2.toLane - mid) == TrickHalfSpan;
+            if (leg1 && ret1 && leg2 &&
+                Time.time - g2.time <= DebugRunConfig.MultiStepTrickActiveWindow)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool AnyPlayerInRingBlockingSequence()
+    {
+        if (Time.time - _lastBigRingTrickTime < 2f)
+            return true;
+        if (Time.time - _lastInfinityTrickTime < 2f)
+            return true;
+
+        foreach (var pc in Object.FindObjectsByType<PlayerController>())
+        {
+            if (pc.IsInBigRingSequence())
+                return true;
+            if (pc.IsInInfinitySequence(includeAirborneGap: true))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool AnyPlayerInHoverBlockingSequence()
+    {
+        if (Time.time - _lastBigRingTrickTime < 2f)
+            return true;
+        if (Time.time - _lastInfinityTrickTime < 2f)
+            return true;
+
+        foreach (var pc in Object.FindObjectsByType<PlayerController>())
+        {
+            if (pc.IsInActiveBigRingSequence())
+                return true;
+            if (pc.IsInActiveInfinitySequence())
+                return true;
         }
         return false;
     }
@@ -825,7 +1090,7 @@ public class PlayerController : MonoBehaviour
             if (other == this)
                 continue;
 
-            if (other.HasInfinityPattern(out float otherEnd) && Mathf.Abs(myEnd - otherEnd) < 4f)
+            if (other.HasInfinityPattern(out float otherEnd) && Mathf.Abs(myEnd - otherEnd) < DebugRunConfig.InfinityPartnerSyncWindow)
             {
                 _lastInfinityTrickTime = Time.time;
                 if (TricksManager.Instance != null)
@@ -851,7 +1116,10 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        if (_noGroundTimer < HoverTrickDuration)
+        if (AnyPlayerInHoverBlockingSequence())
+            return;
+
+        if (_noGroundTimer < DebugRunConfig.HoverTrickDuration)
             return;
 
         foreach (var other in FindObjectsByType<PlayerController>())
@@ -859,7 +1127,7 @@ public class PlayerController : MonoBehaviour
             if (other == this)
                 continue;
 
-            if (other._noGroundTimer >= HoverTrickDuration)
+            if (other._noGroundTimer >= DebugRunConfig.HoverTrickDuration)
             {
                 _hoverTrickAwardedThisStreak = true;
                 if (TricksManager.Instance != null)
@@ -872,29 +1140,50 @@ public class PlayerController : MonoBehaviour
     // "Ring" trick: two players cross through each other's lanes at once —
     // one airborne, one grounded — a full swap of places, like passing
     // through a ring. Works in either direction; whoever completes the
-    // swap second is the one that notices and scores it.
+    // swap second is the one that notices and scores it. Both must start
+    // on the road (not a Bouncing stack) — a rider on someone's back
+    // reads as airborne+grounded too but is not КОЛЬЦО.
     private void TryDetectRingTrick()
     {
         if (Time.time - _lastRingTrickTime < RingTrickCooldown)
             return; // already scored this exact swap from the other player's side
+
+        if (AnyPlayerInRingBlockingSequence())
+            return;
+
+        if (IsBouncing)
+            return;
 
         foreach (var other in FindObjectsByType<PlayerController>())
         {
             if (other == this)
                 continue;
 
-            bool recentEnough = Time.time - other._lastMoveTime <= RingTrickWindow;
+            if (other.IsBouncing)
+                continue;
+
+            bool recentEnough = Time.time - other._lastMoveTime <= DebugRunConfig.RingTrickWindow;
             bool isSwap = other._lastMoveFromLane == _lastMoveToLane && other._lastMoveToLane == _lastMoveFromLane;
             bool oneAirborneOneGrounded = _lastMoveWasAirborne != other._lastMoveWasAirborne;
 
-            if (recentEnough && isSwap && oneAirborneOneGrounded)
-            {
-                _lastRingTrickTime = Time.time;
-                if (TricksManager.Instance != null)
-                    TricksManager.Instance.SpawnPopup("КОЛЬЦО", Midpoint(other));
-                return;
-            }
+            if (!recentEnough || !isSwap || !oneAirborneOneGrounded)
+                continue;
+
+            if (LastMoveWasBouncing() || other.LastMoveWasBouncing())
+                continue;
+
+            _lastRingTrickTime = Time.time;
+            if (TricksManager.Instance != null)
+                TricksManager.Instance.SpawnPopup("КОЛЬЦО", Midpoint(other));
+            return;
         }
+    }
+
+    private bool LastMoveWasBouncing()
+    {
+        if (_moveHistory.Count == 0)
+            return false;
+        return _moveHistory[_moveHistory.Count - 1].wasBouncing;
     }
 
     // Blocked only if BOTH players would be grounded in that lane at once —

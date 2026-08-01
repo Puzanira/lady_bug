@@ -16,7 +16,14 @@ public class ObjectFeedbackIndicator : MonoBehaviour
 {
     public static ObjectFeedbackIndicator Instance { get; private set; }
 
-    [SerializeField] private Text faceText;
+    // A real drawn round face (SceneSetup.CreateSmileyTexture), not a text
+    // glyph — this project's own font is missing some Unicode glyphs in an
+    // actual build (see CreateSingleArrow's own comment on the same issue
+    // with arrow characters), so an emoji character here would risk the
+    // same blank-glyph problem.
+    [SerializeField] private RawImage faceImage;
+    [SerializeField] private Texture2D happyFaceTexture;
+    [SerializeField] private Texture2D sadFaceTexture;
     [SerializeField] private Image[] ticks;
     [SerializeField] private Color dimTickColor = new Color(1f, 1f, 1f, 0.15f);
     [SerializeField] private float fillDuration = 0.4f;
@@ -41,31 +48,30 @@ public class ObjectFeedbackIndicator : MonoBehaviour
             }
         }
 
-        if (faceText != null)
-            faceText.gameObject.SetActive(false);
+        if (faceImage != null)
+            faceImage.gameObject.SetActive(false);
     }
 
     // Fills the whole arc (bottom to top) and leaves it filled.
     public void OnGoodPickup()
     {
-        ShowFace(":)", new Color(0.4f, 1f, 0.5f));
+        ShowFace(happyFaceTexture);
         StartFillTo(ticks != null ? ticks.Length : 0);
     }
 
     // Drains the arc back down to just the bottom (red) tick and leaves it there.
     public void OnBadPickup()
     {
-        ShowFace(":(", new Color(1f, 0.4f, 0.3f));
+        ShowFace(sadFaceTexture);
         StartFillTo(1);
     }
 
-    private void ShowFace(string glyph, Color color)
+    private void ShowFace(Texture2D texture)
     {
-        if (faceText == null)
+        if (faceImage == null)
             return;
-        faceText.text = glyph;
-        faceText.color = color;
-        faceText.gameObject.SetActive(true);
+        faceImage.texture = texture;
+        faceImage.gameObject.SetActive(true);
     }
 
     private void StartFillTo(int targetLit)

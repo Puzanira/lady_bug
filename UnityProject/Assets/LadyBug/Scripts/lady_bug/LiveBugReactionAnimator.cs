@@ -59,13 +59,21 @@ public class LiveBugReactionAnimator : MonoBehaviour
     private Vector3 _restScale = Vector3.one;
     private float _flapFrameTimer;
     private bool _flapFrameToggle;
+    // After a page becomes visible, hold the neutral rest pose briefly so a
+    // shared GestureInput left over from menu navigation (or a sensor still
+    // reading "both hands down" from the previous screen) doesn't make player
+    // 1's bug pop in already squashed at the bottom and then ease up.
+    private float _settleUntil;
     // -1/0/+1 — real lane changes in the actual game are sticky (you stay
     // in whatever lane you moved to, you don't spring back once you let go
     // of the key/gesture), unlike jump/duck which are momentary. Clamped to
     // one step either way so it can't go past laneXLeft/laneXRight.
     private int _laneIndex;
 
-    private bool GestureActive => gestureInput != null && gestureInput.enabled;
+    // Only the real distance-sensor path — not the menu's always-on
+    // GestureInput (see StartScreenController.RestoreMenuGestureMode) and
+    // not the old keyboard-gesture simulator keys (Q/A/E/D).
+    private bool GestureActive => gestureInput != null && gestureInput.enabled && gestureInput.UseRealSensors;
     private bool JoystickActive => joystickInput != null && joystickInput.enabled;
 
     private bool UpHeld() => GestureActive ? gestureInput.JumpHeld : JoystickActive ? joystickInput.UpHeld : Input.GetKey(upKey);
@@ -75,16 +83,53 @@ public class LiveBugReactionAnimator : MonoBehaviour
 
     private void Awake()
     {
-        if (bugImage != null)
-        {
-            _restPos = bugImage.rectTransform.anchoredPosition;
-            _restScale = bugImage.rectTransform.localScale;
-        }
+        CaptureRestPose();
+    }
+
+    private void Start()
+    {
+        // Layout is final by Start — re-read in case Awake ran too early.
+        CaptureRestPose();
+        ApplyRestPose();
+    }
+
+    private void OnEnable()
+    {
+        CaptureRestPose();
+        ApplyRestPose();
+        _settleUntil = Time.time + 0.2f;
+    }
+
+    private void CaptureRestPose()
+    {
+        if (bugImage == null)
+            return;
+
+        _restPos = bugImage.rectTransform.anchoredPosition;
+        _restScale = bugImage.rectTransform.localScale;
+    }
+
+    private void ApplyRestPose()
+    {
+        if (bugImage == null)
+            return;
+
+        RectTransform rt = bugImage.rectTransform;
+        rt.anchoredPosition = _restPos;
+        rt.localScale = _restScale;
+        rt.localRotation = Quaternion.identity;
+        _laneIndex = 0;
+        _flapFrameTimer = 0f;
+        if (bugNormalTexture != null)
+            bugImage.texture = bugNormalTexture;
     }
 
     private void Update()
     {
         if (bugImage == null)
+            return;
+
+        if (Time.time < _settleUntil)
             return;
 
         if (LeanLeftDown())

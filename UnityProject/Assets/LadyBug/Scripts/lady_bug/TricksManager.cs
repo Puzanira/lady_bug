@@ -58,7 +58,9 @@ public class TricksManager : MonoBehaviour
         text.fontSize = 56;
         text.fontStyle = FontStyle.Bold;
         text.alignment = TextAnchor.MiddleCenter;
-        text.text = "+1 ТРЮК\n" + trickName;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.text = "+1 ТРЮК\n" + FormatTrickName(trickName);
         text.color = new Color(0.7f, 0.4f, 1f); // purple — distinct from the green/red score popups
 
         Outline outline = go.AddComponent<Outline>();
@@ -69,7 +71,7 @@ public class TricksManager : MonoBehaviour
         rt.anchorMin = new Vector2(0f, 0f);
         rt.anchorMax = new Vector2(0f, 0f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(360f, 150f);
+        rt.sizeDelta = new Vector2(520f, 180f);
         rt.anchoredPosition = ScreenSpaceUtil.WorldToCanvasPoint(worldPos);
 
         TrickPopup popup = go.AddComponent<TrickPopup>();
@@ -80,6 +82,13 @@ public class TricksManager : MonoBehaviour
     {
         if (tricksText != null)
             tricksText.text = _count.ToString();
+    }
+
+    // Multi-word trick names (БОЛЬШОЕ КОЛЬЦО, etc.) need an explicit line
+    // break — a single long line was clipping in the popup rect.
+    private static string FormatTrickName(string trickName)
+    {
+        return trickName.Replace(" ", "\n");
     }
 }
 }

@@ -49,16 +49,18 @@ public class ArchTrickAnimation : MonoBehaviour
     // bugHeight/bugY and this class's duckOffset/jumpOffset). The arch stays
     // under that ±95 band (well under archMidHeight, see AnimateArch) for
     // the first half of its approach, so it still reads as "passing cleanly
-    // between them" before it keeps growing — up near the edge of the
-    // frame by the end, like it's arrived close to the camera, instead of
-    // cutting off at a modest, still-clearly-distant size. Pulled back
-    // from an even bigger peak (and CreateArchTrickPage's page now clips
-    // to its own bounds with a RectMask2D besides) — it read as "too
-    // close"/spilling past the frame at the very largest size.
+    // between them" before it keeps growing — genuinely flying out past the
+    // page's own edges by the end (clipped there by CreateArchTrickPage's
+    // own RectMask2D, same as any other page content), like it's arrived
+    // right at the camera, instead of stopping at a size that still reads
+    // as comfortably within frame and just vanishing. Widened again — was
+    // pulled back once before per earlier feedback that it read as "too
+    // close", but per newer feedback it wasn't nearly big enough to be
+    // read as flying past the frame at all, just disappearing in place.
     [SerializeField] private float archMidHeight = 170f;
     [SerializeField] private float archMidWidth = 640f;
-    [SerializeField] private float archMaxHeight = 760f;
-    [SerializeField] private float archMaxWidth = 1350f;
+    [SerializeField] private float archMaxHeight = 1240f;
+    [SerializeField] private float archMaxWidth = 2200f;
 
     // Real in-game poses, not separate diagram-only art: ducking is a Y
     // scale squash on the same running sprite (see PlayerController's own

@@ -24,16 +24,22 @@ public class PlayerAnimator : MonoBehaviour
     [SerializeField] private float wingFrameInterval = 0.09f; // flapping reads faster than running legs
     // Animation pace follows CurrentSpeed (min..max km/h) between these two
     // multipliers — distinctly lazier than baseline at the game's minimum
-    // speed, distinctly quicker at its maximum (widened four times now,
-    // from the original 0.7/1.6, per repeated feedback that the dependency
-    // needed to read as stronger still).
+    // speed, distinctly quicker at its maximum.
     [SerializeField] private float minAnimSpeedMultiplier = 0.15f;
     [SerializeField] private float maxAnimSpeedMultiplier = 4f;
+    // Animation reaches maxAnimSpeedMultiplier by this km/h — the road
+    // itself can climb higher, but leg cadence shouldn't stay sluggish all
+    // the way up to MaxSpeed (200). Tightens the coupling where players
+    // actually drive (roughly gears 1–9) without changing the lazy start.
+    [SerializeField] private float animSpeedReferenceMax = 90f;
 
     private Renderer _spriteRenderer;
     private int _frameIndex;
     private float _frameTimer;
+    private float _runPhase;
+    private float _flapPhase;
     private bool _wasAirborne;
+    private bool _wasAnimating;
 
     private void Awake()
     {
@@ -47,24 +53,84 @@ public class PlayerAnimator : MonoBehaviour
             return;
 
         float speedFactor = GetAnimSpeedFactor();
+        bool animating = speedFactor > 0f && (player.enabled || player.IsAirborne);
+
+        if (!animating)
+        {
+            if (ShouldHoldIdlePose())
+                HoldIdlePose();
+            _wasAnimating = false;
+            return;
+        }
+
+        if (!_wasAnimating)
+            ResetCycle();
+        _wasAnimating = true;
 
         float angle = player.IsAirborne
-            ? Mathf.Sin(Time.time * flapCycleSpeed * speedFactor) * flapTiltAngle
-            : Mathf.Sin(Time.time * runCycleSpeed * speedFactor) * runTiltAngle;
+            ? Mathf.Sin(_flapPhase) * flapTiltAngle
+            : Mathf.Sin(_runPhase) * runTiltAngle;
         sprite.localRotation = Quaternion.Euler(0f, 0f, angle);
+
+        if (player.IsAirborne)
+            _flapPhase += Time.deltaTime * flapCycleSpeed * speedFactor;
+        else
+            _runPhase += Time.deltaTime * runCycleSpeed * speedFactor;
 
         UpdateFrame(speedFactor);
     }
 
-    // Normalizes CurrentSpeed (min..max km/h) into the min/maxAnimSpeedMultiplier
-    // range, so slower road speed reads as a slightly lazier gait and faster
-    // road speed as a quicker one, without ever exceeding the cap.
+    // Idle on the pre-game menu only — during pause the pose is frozen
+    // wherever it was, and WinSequence keeps wing-flap going via IsAirborne.
+    private bool ShouldHoldIdlePose()
+    {
+        return SpeedController.Instance == null || !SpeedController.Instance.IsRunning;
+    }
+
+    private void HoldIdlePose()
+    {
+        sprite.localRotation = Quaternion.identity;
+        _runPhase = 0f;
+        _flapPhase = 0f;
+        _frameTimer = 0f;
+        _frameIndex = 0;
+        _wasAirborne = false;
+
+        if (_spriteRenderer != null && groundFrames != null && groundFrames.Length > 0)
+            _spriteRenderer.material.mainTexture = groundFrames[0];
+    }
+
+    private void ResetCycle()
+    {
+        _runPhase = 0f;
+        _flapPhase = 0f;
+        _frameTimer = 0f;
+        _frameIndex = 0;
+        _wasAirborne = player.IsAirborne;
+
+        if (_spriteRenderer == null)
+            return;
+
+        Texture2D[] frames = player.IsAirborne ? airFrames : groundFrames;
+        if (frames != null && frames.Length > 0)
+            _spriteRenderer.material.mainTexture = frames[0];
+    }
+
+    // Maps CurrentSpeed into the min/max multiplier range. Uses
+    // animSpeedReferenceMax (not road MaxSpeed) so cadence ramps up
+    // sharply through normal driving speeds while minSpeed still reads
+    // as a lazy start.
     private float GetAnimSpeedFactor()
     {
         if (SpeedController.Instance == null)
-            return 1f;
+            return 0f;
 
-        float t = Mathf.InverseLerp(SpeedController.Instance.MinSpeed, SpeedController.Instance.MaxSpeed, SpeedController.Instance.CurrentSpeed);
+        SpeedController sc = SpeedController.Instance;
+        if (!sc.IsRunning || sc.CurrentSpeed <= 0f)
+            return 0f;
+
+        float refMax = Mathf.Max(sc.MinSpeed + 1f, animSpeedReferenceMax);
+        float t = Mathf.Clamp01(Mathf.InverseLerp(sc.MinSpeed, refMax, sc.CurrentSpeed));
         return Mathf.Lerp(minAnimSpeedMultiplier, maxAnimSpeedMultiplier, t);
     }
 
@@ -90,7 +156,7 @@ public class PlayerAnimator : MonoBehaviour
             return;
         }
 
-        float interval = (airborne ? wingFrameInterval : legFrameInterval) / speedFactor;
+        float interval = (airborne ? wingFrameInterval : legFrameInterval) / Mathf.Max(speedFactor, 0.01f);
         _frameTimer += Time.deltaTime;
         if (_frameTimer >= interval)
         {

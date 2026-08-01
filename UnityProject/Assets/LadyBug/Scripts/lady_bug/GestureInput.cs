@@ -117,8 +117,24 @@ public class GestureInput : MonoBehaviour
         if (haveRealSensors)
         {
             GestureSensorSerial sensors = GestureSensorSerial.Instance;
-            LeftHandDistanceMm = _isPlayerOne ? sensors.Player1LeftMm : sensors.Player2LeftMm;
-            RightHandDistanceMm = _isPlayerOne ? sensors.Player1RightMm : sensors.Player2RightMm;
+            bool useCombinedBoard = _isPlayerOne && !sensors.IsConnected
+                && JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
+
+            if (useCombinedBoard)
+            {
+                // Combined board (ArduinoFirmware/CombinedBoard) — its 2
+                // hand sensors are always player 1's, carried alongside
+                // player 2's joystick on the same board/port (see
+                // JoystickSerial's own comment on why it, not
+                // GestureSensorSerial, ends up owning this data).
+                LeftHandDistanceMm = JoystickSerial.Instance.HandLeftMm;
+                RightHandDistanceMm = JoystickSerial.Instance.HandRightMm;
+            }
+            else
+            {
+                LeftHandDistanceMm = _isPlayerOne ? sensors.Player1LeftMm : sensors.Player2LeftMm;
+                RightHandDistanceMm = _isPlayerOne ? sensors.Player1RightMm : sensors.Player2RightMm;
+            }
 
             _leftHand = HandStateForDistance(LeftHandDistanceMm);
             _rightHand = HandStateForDistance(RightHandDistanceMm);

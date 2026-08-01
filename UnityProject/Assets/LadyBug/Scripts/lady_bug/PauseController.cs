@@ -5,11 +5,8 @@ using UnityEngine.UI;
 namespace LadyBug
 {
 
-// Yes/No "quit game?" dialog — opened by HelpController when Q is pressed
-// while the F1 help screen is up (braking was removed from every control
-// scheme, so the old "hold brake for 5s" trigger no longer has a key to
-// hang off of; routing it through the help screen keeps a quit path
-// discoverable without adding a dedicated always-on key).
+// Yes/No "quit game?" dialog — opened by DuckToExitController (all players
+// duck-hold) or HelpController (Q on the help screen).
 public class PauseController : MonoBehaviour
 {
     public static PauseController Instance { get; private set; }
@@ -22,12 +19,7 @@ public class PauseController : MonoBehaviour
 
     private bool _dialogOpen;
     private bool _confirmYes;
-    // Both players' gesture/joystick rigs, whichever scheme each one has
-    // enabled — grabbed fresh each time the dialog opens so left/right
-    // toggling and confirm respond to EITHER player's own lean-sideways/
-    // jump gesture, not just one hardcoded scheme or player.
-    private GestureInput[] _gestureInputs;
-    private JoystickInput[] _joystickInputs;
+    private PlayerController[] _players;
 
     public bool IsDialogOpen => _dialogOpen;
 
@@ -48,15 +40,14 @@ public class PauseController : MonoBehaviour
     {
         _dialogOpen = true;
         _confirmYes = false;
-        _gestureInputs = FindObjectsByType<GestureInput>();
-        _joystickInputs = FindObjectsByType<JoystickInput>();
+        _players = FindObjectsByType<PlayerController>();
 
         if (SpeedController.Instance != null)
             SpeedController.Instance.SetPaused(true);
         if (GameTimer.Instance != null)
             GameTimer.Instance.Pause();
 
-        foreach (var p in FindObjectsByType<PlayerController>())
+        foreach (var p in _players)
             p.enabled = false;
 
         if (dialogRoot != null)
@@ -66,31 +57,19 @@ public class PauseController : MonoBehaviour
 
     private void HandleDialogInput()
     {
-        bool left = Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A);
-        bool right = Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D);
-        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return);
+        bool left = false;
+        bool right = false;
+        bool confirm = false;
 
-        if (_gestureInputs != null)
+        if (_players != null)
         {
-            foreach (GestureInput g in _gestureInputs)
+            foreach (PlayerController p in _players)
             {
-                if (g == null || !g.enabled)
+                if (p == null || !p.gameObject.activeInHierarchy)
                     continue;
-                left |= g.LeanLeftDown;
-                right |= g.LeanRightDown;
-                confirm |= g.JumpDown;
-            }
-        }
-
-        if (_joystickInputs != null)
-        {
-            foreach (JoystickInput j in _joystickInputs)
-            {
-                if (j == null || !j.enabled)
-                    continue;
-                left |= j.LeftDown;
-                right |= j.RightDown;
-                confirm |= j.UpDown;
+                left |= p.ReadLeanLeftDown();
+                right |= p.ReadLeanRightDown();
+                confirm |= p.ReadJumpDown();
             }
         }
 
@@ -103,11 +82,15 @@ public class PauseController : MonoBehaviour
         if (confirm)
         {
             if (_confirmYes)
+            {
+                if (SpeedController.Instance != null)
+                    SpeedController.Instance.ResetForMenu();
                 // Reload by buildIndex, not name: in the arcade-hub build lady_bug's
                 // entry scene and Sisyphus's are BOTH named "Main", so LoadScene(name)
                 // resolves to the first "Main" in Build Settings (Sisyphus) and
                 // launches the wrong game. buildIndex is collision-proof.
                 SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            }
             else
                 CloseDialog();
         }

@@ -11,6 +11,9 @@ public static class SceneSetup
 {
     const int LaneCount = 4;
     const float LaneWidth = 4f;
+    // Set false for production cabinet builds — skips the keyboard/sensors row
+    // on the start screen (must match StartScreenController.ShowControllerSelectionRow).
+    const bool ShowControllerSelectionRow = true;
     const float RoadLength = 150f;
     const float RoadCenterZ = 1f;
     // World units per dash+gap cycle — was 4 (dash+gap blurred into one
@@ -21,14 +24,6 @@ public static class SceneSetup
     // CreateDashTexture and cycled through along the road, instead of every
     // dash looking identical — see CreateDashTexture/DrawDashBand.
     const int DashVariantCount = 3;
-    // How many brightness/warmth cycles ShoulderTileVariants.png completes
-    // across its own stacked height (see CreateRoadShoulder) — a smooth,
-    // seamlessly-tiling sine modulation of the single baked ShoulderTile.png
-    // sprite (no hard cuts — an earlier version stacked discretely-tinted
-    // copies, which showed a visible seam at each boundary, per feedback),
-    // so the strip doesn't repeat as one flatly identical tint the whole
-    // length of the road.
-    const int ShoulderVariantCount = 3;
     const float ScrollSpeed = 10f;
     const float RoadTextureTileSize = 1.5f; // world units per asphalt-texture tile — must match CreateRoadTexture's mainTextureScale divisor
     const float GrassTextureTileSize = 4f; // world units per side-grass-texture tile (Assets/LadyBug/Sprites/GrassTile.png)
@@ -112,6 +107,7 @@ public static class SceneSetup
         CreateRoad();
         CreateSideGround();
         CreateRoadShoulder();
+        CreateShoulderDecor();
         CreateSpawner();
         CreateBigArchSpawner();
         CreateSideScenery();
@@ -360,9 +356,8 @@ public static class SceneSetup
         playerSo.FindProperty("downKey").intValue = (int)down;
         playerSo.ApplyModifiedPropertiesWithoutUndo();
 
-        // Gesture (distance-sensor) input — keyboard-simulated for now, since
-        // no hardware is connected. Disabled by default; the start screen
-        // enables it only if the sensor simulator is the chosen controller.
+        // Gesture (distance-sensor) input — disabled by default; the start
+        // screen enables it only when "Датчики" is the chosen controller.
         GestureInput gesture = player.AddComponent<GestureInput>();
         SerializedObject gestureSo = new SerializedObject(gesture);
         gestureSo.FindProperty("leftHandUpKey").intValue = (int)leftHandUp;
@@ -610,28 +605,19 @@ public static class SceneSetup
     {
         float roadWidth = LaneCount * LaneWidth;
         const float shoulderWidth = 2.5f;
-        const float pavementOverlap = 0.5f; // how far this reaches onto the road side of the seam
-        // A smooth ShoulderVariantCount-cycle brightness/warmth wave over
-        // the single baked ShoulderTile.png sprite (see yandex_api scripts /
-        // repo history) — per feedback that a single sprite repeated the
-        // whole road length reads as too uniform. There was no room to add
-        // colour randomness to ShoulderTile.png itself since it's baked AI
-        // artwork, not procedurally drawn circles, so the variance is
-        // layered on top instead — continuous, not discrete tinted bands
-        // (an earlier version stacked hard-cut bands, which showed a
-        // visible seam at each boundary; this one has no boundaries at all,
-        // and tiles seamlessly with itself besides).
-        Texture2D shoulderVariantsTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/ShoulderTileVariants.png");
-        Texture2D shoulderTexture = shoulderVariantsTexture != null
-            ? shoulderVariantsTexture
-            : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/ShoulderTile.png");
+        const float pavementOverlap = 0.5f;
+        // Procedural tint bands via Custom/ShoulderTint + ShoulderTintScroller
+        // on ShoulderTile.png — no baked ShoulderTileVariants.png needed.
+        Texture2D shoulderTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/ShoulderTile.png");
         if (shoulderTexture == null)
             return;
-        // The variants texture is ShoulderVariantCount copies of the base
-        // sprite stacked vertically, so a full V-tile now spans that many
-        // times more world length — same accounting CreateDashedDivider
-        // does for DashVariantCount.
-        int shoulderVariantCount = shoulderVariantsTexture != null ? ShoulderVariantCount : 1;
+
+        Shader shoulderShader = Shader.Find("Custom/ShoulderTint");
+        if (shoulderShader == null)
+        {
+            Debug.LogWarning("CreateRoadShoulder: Custom/ShoulderTint shader not found — import Assets/LadyBug/Shaders/lady_bug/ShoulderTint.shader");
+            return;
+        }
 
         foreach (float side in new[] { -1f, 1f })
         {
@@ -644,21 +630,168 @@ public static class SceneSetup
             Object.DestroyImmediate(shoulder.GetComponent<Collider>());
 
             Renderer renderer = shoulder.GetComponent<Renderer>();
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
-            Material material = new Material(shader)
+            Material material = new Material(shoulderShader)
             {
                 mainTexture = shoulderTexture,
                 mainTextureScale = new Vector2(
                     shoulderWidth / GrassTextureTileSize,
-                    RoadLength / (GrassTextureTileSize * shoulderVariantCount))
+                    RoadLength / GrassTextureTileSize)
             };
             renderer.sharedMaterial = material;
 
-            ScrollingTexture shoulderScroller = shoulder.AddComponent<ScrollingTexture>();
-            SerializedObject shoulderSo = new SerializedObject(shoulderScroller);
-            shoulderSo.FindProperty("dashPeriod").floatValue = GrassTextureTileSize * shoulderVariantCount;
+            ShoulderTintScroller scroller = shoulder.AddComponent<ShoulderTintScroller>();
+            SerializedObject shoulderSo = new SerializedObject(scroller);
+            shoulderSo.FindProperty("scrollPeriod").floatValue = GrassTextureTileSize;
+            shoulderSo.FindProperty("tileWorldSize").floatValue = GrassTextureTileSize;
             shoulderSo.ApplyModifiedPropertiesWithoutUndo();
         }
+    }
+
+    // Rocks and grass tufts on the shoulder; grass-only copies also spawn
+    // on the side grass strip via GrassDecorSpawner.
+    static readonly (string name, string file, float height)[] ShoulderDecorSprites =
+    {
+        ("ShoulderRock1", "ShoulderRock1.png", 0.9f),
+        ("ShoulderRock2", "ShoulderRock2.png", 0.75f),
+        ("ShoulderRock3", "ShoulderRock3.png", 1.05f),
+        ("ShoulderGrass1", "ShoulderGrass1.png", 0.6f),
+        ("ShoulderGrass2", "ShoulderGrass2.png", 0.7f),
+        ("ShoulderGrass3", "ShoulderGrass3.png", 0.85f),
+    };
+
+    static void CreateShoulderDecor()
+    {
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Prefabs/lady_bug");
+
+        var shoulderPrefabs = new System.Collections.Generic.List<GameObject>();
+        var grassPrefabs = new System.Collections.Generic.List<GameObject>();
+        foreach (var (name, file, height) in ShoulderDecorSprites)
+        {
+            GameObject prefab = CreateShoulderDecorPrefab(name, "Assets/LadyBug/Sprites/lady_bug/" + file, height);
+            if (prefab == null)
+                continue;
+            shoulderPrefabs.Add(prefab);
+            if (name.Contains("Grass"))
+                grassPrefabs.Add(prefab);
+        }
+
+        if (shoulderPrefabs.Count == 0 && grassPrefabs.Count == 0)
+        {
+            Debug.LogWarning("ShoulderDecor: no sprites found — run yandex_api/gen_shoulder_decal_assets.sh then Rebuild Scene");
+            return;
+        }
+
+        float roadWidth = LaneCount * LaneWidth;
+
+        if (shoulderPrefabs.Count > 0)
+        {
+            var spawnerGo = new GameObject("ShoulderDecorSpawner");
+            ShoulderDecorSpawner spawner = spawnerGo.AddComponent<ShoulderDecorSpawner>();
+            SerializedObject so = new SerializedObject(spawner);
+            SetPrefabArray(so, "prefabs", shoulderPrefabs);
+            so.FindProperty("roadHalfWidth").floatValue = roadWidth / 2f;
+            so.FindProperty("shoulderWidth").floatValue = 2.5f;
+            so.FindProperty("pavementOverlap").floatValue = 0.5f;
+            so.FindProperty("spawnZ").floatValue = RoadCenterZ + RoadLength / 2f - 5f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        if (grassPrefabs.Count > 0)
+        {
+            var grassGo = new GameObject("GrassDecorSpawner");
+            GrassDecorSpawner grassSpawner = grassGo.AddComponent<GrassDecorSpawner>();
+            SerializedObject grassSo = new SerializedObject(grassSpawner);
+            SetPrefabArray(grassSo, "prefabs", grassPrefabs);
+            grassSo.FindProperty("roadHalfWidth").floatValue = roadWidth / 2f;
+            grassSo.FindProperty("shoulderWidth").floatValue = 2.5f;
+            grassSo.FindProperty("pavementOverlap").floatValue = 0.5f;
+            grassSo.FindProperty("spawnZ").floatValue = RoadCenterZ + RoadLength / 2f - 5f;
+            grassSo.ApplyModifiedPropertiesWithoutUndo();
+        }
+    }
+
+    // First opaque scan row from the PNG bottom — trims empty transparent
+    // padding so decal bottoms sit flush on the ground/shoulder surface.
+    static float GetBottomTrimNormalized(string assetPath, float alphaThreshold = 0.1f)
+    {
+        string relative = assetPath.StartsWith("Assets/") ? assetPath.Substring(7) : assetPath;
+        string fullPath = System.IO.Path.Combine(Application.dataPath, relative);
+        if (!System.IO.File.Exists(fullPath))
+            return 0f;
+
+        byte[] bytes = System.IO.File.ReadAllBytes(fullPath);
+        var temp = new Texture2D(2, 2);
+        if (!temp.LoadImage(bytes))
+        {
+            Object.DestroyImmediate(temp);
+            return 0f;
+        }
+
+        int w = temp.width;
+        int h = temp.height;
+        Color32[] pixels = temp.GetPixels32();
+        Object.DestroyImmediate(temp);
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                if (pixels[y * w + x].a / 255f > alphaThreshold)
+                    return y / (float)h;
+            }
+        }
+
+        return 0f;
+    }
+
+    static GameObject CreateShoulderDecorPrefab(string name, string texturePath, float height)
+    {
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+        if (tex == null)
+            return null;
+
+        float bottomTrimNorm = GetBottomTrimNormalized(texturePath);
+        float visibleFraction = 1f - bottomTrimNorm;
+        float visibleHeight = height * visibleFraction;
+        float aspect = (float)tex.width / tex.height;
+        float spriteWidth = height * aspect;
+
+        var root = new GameObject(name);
+        root.transform.position = new Vector3(0f, visibleHeight / 2f, 0f);
+        root.AddComponent<MovingEntity>();
+        GroundDecorInfo decorInfo = root.AddComponent<GroundDecorInfo>();
+        decorInfo.visibleHeight = visibleHeight;
+        decorInfo.visibleHalfWidth = spriteWidth * 0.5f;
+
+        GameObject sprite = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        sprite.name = "Sprite";
+        Object.DestroyImmediate(sprite.GetComponent<Collider>());
+        sprite.transform.SetParent(root.transform);
+        sprite.transform.localScale = new Vector3(spriteWidth, height, 1f);
+        sprite.transform.localPosition = Vector3.zero;
+
+        Renderer renderer = sprite.GetComponent<Renderer>();
+        // URP-safe: the built-in Legacy/Standard shaders this line used to ask for render
+        // as magenta under the Universal pipeline. Same retarget every other sprite
+        // quad in this file already got.
+        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
+        Material material = new Material(shader)
+        {
+            mainTexture = tex,
+            mainTextureOffset = new Vector2(0f, bottomTrimNorm),
+            mainTextureScale = new Vector2(1f, visibleFraction)
+        };
+
+        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials/lady_bug");
+        string materialPath = "Assets/LadyBug/Materials/lady_bug/" + name + ".mat";
+        AssetDatabase.DeleteAsset(materialPath);
+        AssetDatabase.CreateAsset(material, materialPath);
+        renderer.sharedMaterial = material;
+
+        string savePath = "Assets/LadyBug/Prefabs/lady_bug/" + name + ".prefab";
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
+        Object.DestroyImmediate(root);
+        return prefab;
     }
 
     static void CreateDashedDivider(float x, int seedOffset)
@@ -1316,11 +1449,10 @@ public static class SceneSetup
                   + "ТРЮКИ\n"
                   + "АРКА: один приседает под аркой, другой в этот момент перепрыгивает её вместе с ним\n"
                   + "КОЛЬЦО: игроки одновременно меняются полосами — один в прыжке, другой понизу\n\n"
-                  + "ДАТЧИКИ РАССТОЯНИЯ (ИМИТАТОР)\n"
+                  + "ДАТЧИКИ РАССТОЯНИЯ\n"
                   + "2 датчика на игрока — по одному на руку (только верх/низ):\n"
                   + "обе руки вниз — пригнуться, одна вверх/другая вниз — полоса в сторону опущенной руки,\n"
-                  + "быстро жать «верх» на обеих руках разом — прыжок-полёт\n"
-                  + "Имитатор: левый Q/A верх/низ левой руки, E/D верх/низ правой; правый U/J, O/L\n\n"
+                  + "быстро жать «верх» на обеих руках разом — прыжок-полёт\n\n"
                   + "ВЫХОД ИЗ ИГРЫ\n"
                   + "Все игроки разом держат «пригнуться» 10 секунд — после первых 5 молча, "
                   + "следующие 5 с обратным отсчётом на экране";
@@ -1708,18 +1840,18 @@ public static class SceneSetup
         RectTransform faceContentRt = CreateWedgeContent(emptyHubGo.transform, true, 0f, gearHubWedgeRadius * 0.6f, 115f, 115f);
         var faceGo = new GameObject("FeedbackFace");
         faceGo.transform.SetParent(faceContentRt, false);
-        Text faceText = faceGo.AddComponent<Text>();
-        faceText.font = GameFont;
-        faceText.fontSize = 56;
-        faceText.fontStyle = FontStyle.Bold;
-        faceText.alignment = TextAnchor.MiddleCenter;
-        faceText.color = Color.white;
-        faceGo.AddComponent<Outline>().effectColor = Color.black;
-        RectTransform faceRt = faceText.GetComponent<RectTransform>();
+        RawImage faceImage = faceGo.AddComponent<RawImage>();
+        Texture2D happyFaceTexture = CreateSmileyTexture(200, true);
+        Texture2D sadFaceTexture = CreateSmileyTexture(200, false);
+        faceImage.texture = happyFaceTexture;
+        RectTransform faceRt = faceImage.GetComponent<RectTransform>();
         faceRt.anchorMin = Vector2.zero;
         faceRt.anchorMax = Vector2.one;
-        faceRt.offsetMin = Vector2.zero;
-        faceRt.offsetMax = Vector2.zero;
+        // Inset so the round face stays inside the quarter-sector badge —
+        // at full bleed it clipped past the wedge edge toward the corner.
+        const float faceInset = 14f;
+        faceRt.offsetMin = new Vector2(faceInset, faceInset);
+        faceRt.offsetMax = new Vector2(-faceInset, -faceInset);
         faceGo.SetActive(false);
 
         Image[] feedbackTicks = CreateTickRing(emptyHubGo.transform, true, 10, speedTickRadius, RightWedgeAngle - 4f);
@@ -1729,7 +1861,9 @@ public static class SceneSetup
         var feedbackGo = new GameObject("ObjectFeedbackIndicator");
         ObjectFeedbackIndicator feedbackIndicator = feedbackGo.AddComponent<ObjectFeedbackIndicator>();
         SerializedObject feedbackSo = new SerializedObject(feedbackIndicator);
-        feedbackSo.FindProperty("faceText").objectReferenceValue = faceText;
+        feedbackSo.FindProperty("faceImage").objectReferenceValue = faceImage;
+        feedbackSo.FindProperty("happyFaceTexture").objectReferenceValue = happyFaceTexture;
+        feedbackSo.FindProperty("sadFaceTexture").objectReferenceValue = sadFaceTexture;
         SerializedProperty feedbackTicksProp = feedbackSo.FindProperty("ticks");
         feedbackTicksProp.arraySize = feedbackTicks.Length;
         for (int i = 0; i < feedbackTicks.Length; i++)
@@ -2915,27 +3049,32 @@ public static class SceneSetup
         GameObject option2 = CreateMenuOption(rowGo.transform, "Option2", new Vector2(180f, 0f), "[ ] 2 ИГРОКА", 280f, 32, 60f);
 
         // Controller-type row — its Outline is the focus frame for row 1.
-        var controllerRowGo = new GameObject("ControllerRow");
-        controllerRowGo.transform.SetParent(canvasGo.transform, false);
-        Image controllerRowBg = controllerRowGo.AddComponent<Image>();
-        controllerRowBg.color = new Color(1f, 1f, 1f, 0.05f);
-        controllerRowBg.sprite = CreateSoftRectSprite(128, 0.15f); // see rowBg's own comment above
-        controllerRowBg.type = Image.Type.Sliced;
-        Outline controllerRowOutline = controllerRowGo.AddComponent<Outline>();
-        controllerRowOutline.effectDistance = new Vector2(4f, -4f);
-        RectTransform controllerRowRt = controllerRowGo.GetComponent<RectTransform>();
-        controllerRowRt.anchorMin = new Vector2(0.5f, 0.5f);
-        controllerRowRt.anchorMax = new Vector2(0.5f, 0.5f);
-        controllerRowRt.pivot = new Vector2(0.5f, 0.5f);
-        controllerRowRt.sizeDelta = new Vector2(980f, 80f); // width widened both sides (was 900) — height already right
-        controllerRowRt.anchoredPosition = new Vector2(0f, -410f);
+        // Omit entirely when ShowControllerSelectionRow is false (prod cabinet).
+        GameObject controllerRowGo = null;
+        Outline controllerRowOutline = null;
+        Image controllerRowBg = null;
+        GameObject controller1 = null;
+        GameObject controller2 = null;
+        if (ShowControllerSelectionRow)
+        {
+            controllerRowGo = new GameObject("ControllerRow");
+            controllerRowGo.transform.SetParent(canvasGo.transform, false);
+            controllerRowBg = controllerRowGo.AddComponent<Image>();
+            controllerRowBg.color = new Color(1f, 1f, 1f, 0.05f);
+            controllerRowBg.sprite = CreateSoftRectSprite(128, 0.15f); // see rowBg's own comment above
+            controllerRowBg.type = Image.Type.Sliced;
+            controllerRowOutline = controllerRowGo.AddComponent<Outline>();
+            controllerRowOutline.effectDistance = new Vector2(4f, -4f);
+            RectTransform controllerRowRt = controllerRowGo.GetComponent<RectTransform>();
+            controllerRowRt.anchorMin = new Vector2(0.5f, 0.5f);
+            controllerRowRt.anchorMax = new Vector2(0.5f, 0.5f);
+            controllerRowRt.pivot = new Vector2(0.5f, 0.5f);
+            controllerRowRt.sizeDelta = new Vector2(780f, 80f); // two options, same width as the player-count row
+            controllerRowRt.anchoredPosition = new Vector2(0f, -410f);
 
-        // Narrower than the default 360px option box, and spaced a full box
-        // width + gap apart, since three of these side by side would
-        // otherwise overlap (360 wide but only 280 apart, in a prior version).
-        GameObject controller1 = CreateMenuOption(controllerRowGo.transform, "Controller1", new Vector2(-300f, 0f), "[X] КЛАВИАТУРА", 260f, 26, 60f);
-        GameObject controller2 = CreateMenuOption(controllerRowGo.transform, "Controller2", new Vector2(0f, 0f), "[ ] ДАТЧИКИ", 260f, 26, 60f);
-        GameObject controller3 = CreateMenuOption(controllerRowGo.transform, "Controller3", new Vector2(300f, 0f), "[ ] ИМИТАТОР", 260f, 26, 60f);
+            controller1 = CreateMenuOption(controllerRowGo.transform, "Controller1", new Vector2(-180f, 0f), "[X] КЛАВИАТУРА", 280f, 26, 60f);
+            controller2 = CreateMenuOption(controllerRowGo.transform, "Controller2", new Vector2(180f, 0f), "[ ] ДАТЧИКИ", 280f, 26, 60f);
+        }
 
         // Start row — same two-layer structure as the other two rows now
         // (outer row frame that tints yellow when focused, inner button
@@ -3118,12 +3257,10 @@ public static class SceneSetup
         so.FindProperty("option2Text").objectReferenceValue = option2.GetComponentInChildren<Text>();
         so.FindProperty("optionsRowOutline").objectReferenceValue = rowOutline;
         so.FindProperty("optionsRowBg").objectReferenceValue = rowBg;
-        so.FindProperty("controller1Bg").objectReferenceValue = controller1.GetComponent<Image>();
-        so.FindProperty("controller2Bg").objectReferenceValue = controller2.GetComponent<Image>();
-        so.FindProperty("controller3Bg").objectReferenceValue = controller3.GetComponent<Image>();
-        so.FindProperty("controller1Text").objectReferenceValue = controller1.GetComponentInChildren<Text>();
-        so.FindProperty("controller2Text").objectReferenceValue = controller2.GetComponentInChildren<Text>();
-        so.FindProperty("controller3Text").objectReferenceValue = controller3.GetComponentInChildren<Text>();
+        so.FindProperty("controller1Bg").objectReferenceValue = controller1 != null ? controller1.GetComponent<Image>() : null;
+        so.FindProperty("controller2Bg").objectReferenceValue = controller2 != null ? controller2.GetComponent<Image>() : null;
+        so.FindProperty("controller1Text").objectReferenceValue = controller1 != null ? controller1.GetComponentInChildren<Text>() : null;
+        so.FindProperty("controller2Text").objectReferenceValue = controller2 != null ? controller2.GetComponentInChildren<Text>() : null;
         so.FindProperty("controllerRowOutline").objectReferenceValue = controllerRowOutline;
         so.FindProperty("controllerRowBg").objectReferenceValue = controllerRowBg;
         so.FindProperty("notImplementedText").objectReferenceValue = notImplemented;
@@ -4876,7 +5013,7 @@ public static class SceneSetup
         hint.fontSize = 24;
         hint.alignment = TextAnchor.MiddleCenter;
         hint.color = new Color(0.85f, 0.85f, 0.85f);
-        hint.text = "←→ выбор, Space — подтвердить";
+        hint.text = "←→ выбор, прыжок — подтвердить";
         RectTransform hintRt = hint.GetComponent<RectTransform>();
         hintRt.anchorMin = new Vector2(0.5f, 0.5f);
         hintRt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -6011,6 +6148,74 @@ public static class SceneSetup
         float borderPx = feather;
         return Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
             SpriteMeshType.FullRect, new Vector4(borderPx, borderPx, borderPx, borderPx));
+    }
+
+    // Round happy/sad face for ObjectFeedbackIndicator — drawn pixels, not
+    // a text glyph (ComicCAT lacks reliable emoji coverage in builds).
+    static Texture2D CreateSmileyTexture(int size, bool happy)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        var pixels = new Color[size * size];
+        float cx = size * 0.5f;
+        float cy = size * 0.5f;
+        float radius = size * 0.46f;
+        Color faceColor = happy ? new Color(1f, 0.88f, 0.15f) : new Color(0.55f, 0.68f, 0.92f);
+        Color featureColor = new Color(0.12f, 0.08f, 0.05f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - cx;
+                float dy = y + 0.5f - cy;
+                pixels[y * size + x] = dx * dx + dy * dy <= radius * radius ? faceColor : Color.clear;
+            }
+        }
+
+        float eyeR = radius * 0.11f;
+        StampFilledCircle(pixels, size, new Vector2(cx - radius * 0.32f, cy + radius * 0.18f), eyeR, featureColor);
+        StampFilledCircle(pixels, size, new Vector2(cx + radius * 0.32f, cy + radius * 0.18f), eyeR, featureColor);
+
+        // Sad arc bulges upward (inverted smile), so its center must sit
+        // lower than the happy mouth — otherwise the frown peak hits the eyes.
+        float mouthY = cy - radius * (happy ? 0.12f : 0.40f);
+        float mouthRadius = radius * (happy ? 0.42f : 0.38f);
+        float mouthHalfThick = radius * 0.07f;
+        int arcSteps = 24;
+        for (int i = 0; i < arcSteps; i++)
+        {
+            float t0 = (float)i / arcSteps;
+            float t1 = (float)(i + 1) / arcSteps;
+            float a0 = Mathf.Lerp(200f, 340f, t0) * Mathf.Deg2Rad;
+            float a1 = Mathf.Lerp(200f, 340f, t1) * Mathf.Deg2Rad;
+            Vector2 p0 = new Vector2(cx + Mathf.Cos(a0) * mouthRadius, mouthY + Mathf.Sin(a0) * mouthRadius * (happy ? 1f : -1f));
+            Vector2 p1 = new Vector2(cx + Mathf.Cos(a1) * mouthRadius, mouthY + Mathf.Sin(a1) * mouthRadius * (happy ? 1f : -1f));
+            StampSolidLine(pixels, size, p0, p1, mouthHalfThick, featureColor);
+        }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return tex;
+    }
+
+    static void StampFilledCircle(Color[] pixels, int texSize, Vector2 center, float radius, Color color)
+    {
+        int minX = Mathf.Max(0, Mathf.FloorToInt(center.x - radius));
+        int maxX = Mathf.Min(texSize - 1, Mathf.CeilToInt(center.x + radius));
+        int minY = Mathf.Max(0, Mathf.FloorToInt(center.y - radius));
+        int maxY = Mathf.Min(texSize - 1, Mathf.CeilToInt(center.y + radius));
+        float rSq = radius * radius;
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                float dx = x + 0.5f - center.x;
+                float dy = y + 0.5f - center.y;
+                if (dx * dx + dy * dy <= rSq)
+                    pixels[y * texSize + x] = color;
+            }
+        }
     }
 
     // Black square with a bold red diagonal cross — placeholder for a

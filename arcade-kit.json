@@ -20,10 +20,6 @@
       "baselineCount": 4
     },
     {
-      "file": "Scripts/lady_bug/PauseController.cs",
-      "baselineCount": 3
-    },
-    {
       "file": "Scripts/lady_bug/HelpController.cs",
       "baselineCount": 2
     },

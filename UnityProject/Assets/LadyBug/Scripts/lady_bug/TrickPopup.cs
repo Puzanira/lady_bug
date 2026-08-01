@@ -11,7 +11,8 @@ public class TrickPopup : MonoBehaviour
 {
     public RectTransform target;
 
-    [SerializeField] private float duration = 1.1f;
+    [SerializeField] private float holdDuration = 0.9f;
+    [SerializeField] private float flyDuration = 1.1f;
 
     private RectTransform _rect;
     private Vector2 _startPos;
@@ -26,14 +27,17 @@ public class TrickPopup : MonoBehaviour
     private void Update()
     {
         _timer += Time.deltaTime;
-        float t = Mathf.Clamp01(_timer / duration);
-        float eased = t * t;
+        if (_timer < holdDuration)
+            return;
+
+        float flyT = Mathf.Clamp01((_timer - holdDuration) / flyDuration);
+        float eased = flyT * flyT;
 
         Vector2 targetPos = target != null ? target.anchoredPosition : _startPos;
         _rect.anchoredPosition = Vector2.Lerp(_startPos, targetPos, eased);
-        _rect.localScale = Vector3.one * Mathf.Lerp(1f, 0.4f, t);
+        _rect.localScale = Vector3.one * Mathf.Lerp(1f, 0.4f, flyT);
 
-        if (t >= 1f)
+        if (flyT >= 1f)
         {
             if (TricksManager.Instance != null)
                 TricksManager.Instance.AddTrick();

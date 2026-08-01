@@ -23,6 +23,10 @@ public class SpeedController : MonoBehaviour
     // second" multiplier, not a physically meaningful unit.
     [SerializeField] private float distancePaceMultiplier = 15f;
     [SerializeField] private float winDecelRate = 40f; // km/h shed per second once the boost ends
+    // Tuned so a ~3s pre-fly hold (WinSequence.entityFadeDuration) climbs
+    // from minSpeed to ~85–90 km/h — v ≈ v0 + a0·t + ½·ramp·t² with defaults.
+    [SerializeField] private float winBoostInitialAccel = 15f;
+    [SerializeField] private float winBoostAccelRamp = 10f;
 
     public float CurrentSpeed { get; private set; }
     public float MinSpeed => minSpeed;
@@ -58,16 +62,39 @@ public class SpeedController : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        ResetForMenu();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
+    /// <summary>Clears all run state — menu idle, or right before a scene reload after a win.</summary>
+    public void ResetForMenu()
+    {
+        _gameStarted = false;
+        _winBoost = false;
+        _winDecelerate = false;
+        _winAccel = 0f;
+        _paused = false;
+        _speedBeforePause = 0f;
         // Ambient idle scroll on the start screen — road, dashed lines and
         // side scenery drift by in the background instead of sitting frozen.
         CurrentSpeed = minSpeed;
+        DistanceKm = 0f;
+        MaxSpeedReached = 0f;
     }
 
     /// <summary>Called by the start screen once a mode is confirmed — releases the road.</summary>
     public void BeginGame()
     {
+        ResetForMenu();
         _gameStarted = true;
         CurrentSpeed = minSpeed;
+        DebugRunConfig.DisableRoadSpawners();
+        DebugRunConfig.ClearRoadEntities();
     }
 
     /// <summary>Called by the pause dialog — freezes the road (and everything driven by
@@ -102,7 +129,10 @@ public class SpeedController : MonoBehaviour
     {
         _winBoost = true;
         _winDecelerate = false;
-        _winAccel = baseAccel;
+        _winAccel = winBoostInitialAccel;
+        // OfferContinue's deceleration can leave CurrentSpeed at 0 — floor
+        // at minSpeed so the pre-fly ramp (and PlayerAnimator) start cleanly.
+        CurrentSpeed = Mathf.Max(CurrentSpeed, minSpeed);
     }
 
     /// <summary>Called once the players have flown off-screen — the road eases back down to a
@@ -129,7 +159,7 @@ public class SpeedController : MonoBehaviour
 
         if (_winBoost)
         {
-            _winAccel += 5f * Time.deltaTime; // the acceleration itself keeps ramping up
+            _winAccel += winBoostAccelRamp * Time.deltaTime;
             CurrentSpeed += _winAccel * Time.deltaTime;
             return;
         }

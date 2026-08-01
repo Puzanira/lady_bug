@@ -45,7 +45,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 47deb6e9e9db540fe8945b2ef449c151, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MovingEntity
+  m_EditorClassIdentifier: LadyBug.Runtime::LadyBug.MovingEntity
   destroyZ: -10
 --- !u!65 &8142336881251775686
 BoxCollider:

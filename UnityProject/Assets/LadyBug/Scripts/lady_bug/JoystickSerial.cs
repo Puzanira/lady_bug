@@ -9,15 +9,23 @@ using UnityEngine;
 namespace LadyBug
 {
 
-// Reads player 2's joystick Arduino (see ArduinoFirmware/Joystick) over
-// serial and exposes its latest up/down/left/right switch state. Same
-// approach as GestureSensorSerial (background-thread port I/O, macOS
-// termios via direct libSystem calls since Unity doesn't expose
-// System.IO.Ports) — duplicated rather than shared with it on purpose,
-// matching this project's existing precedent of one self-contained reader
-// per board (see GestureSensorSerial's own comment) so a change to one
-// board's plumbing can't accidentally affect the other, and so both boards
-// can be plugged in and identified independently at the same time.
+// Reads player 2's joystick Arduino (see ArduinoFirmware/Joystick, or
+// ArduinoFirmware/CombinedBoard if it's sharing one board with player 1's
+// hand sensors instead of two separate ones) over serial and exposes its
+// latest up/down/left/right switch state — plus, if the connected board is
+// the combined variant, player 1's own 2 hand-sensor readings too (see
+// HandLeftMm/HandRightMm below). Both boards identify themselves as plain
+// "BOARD,JOYSTICK", so this is the one class that ends up owning the port
+// either way — GestureSensorSerial (which owns the SEPARATE dedicated-
+// sensor-board case) never touches this port at all, avoiding the two
+// classes fighting over the same one. Same low-level approach as
+// GestureSensorSerial (background-thread port I/O, macOS termios via direct
+// libSystem calls since Unity doesn't expose System.IO.Ports) — duplicated
+// rather than shared with it on purpose, matching this project's existing
+// precedent of one self-contained reader per board (see GestureSensorSerial's
+// own comment) so a change to one board's plumbing can't accidentally affect
+// the other, and so both boards can be plugged in and identified
+// independently at the same time.
 public sealed class JoystickSerial : MonoBehaviour
 {
     public static JoystickSerial Instance { get; private set; }
@@ -32,12 +40,21 @@ public sealed class JoystickSerial : MonoBehaviour
     public bool Left { get; private set; }
     public bool Right { get; private set; }
 
+    // Only ever populated if the connected board actually sends a "G,..."
+    // line (the combined joystick+sensors variant) — stays at the -1 "no
+    // valid target" default forever on a plain joystick-only board, which
+    // GestureInput already treats as "no reading" (see HandStateForDistance).
+    public int HandLeftMm { get; private set; } = -1;
+    public int HandRightMm { get; private set; } = -1;
+
     private Thread _thread;
     private volatile bool _stopRequested;
     private volatile bool _connected;
     private readonly object _lock = new object();
     private readonly int[] _latest = { 0, 0, 0, 0 };
+    private readonly int[] _latestHands = { -1, -1 };
     private bool _hasNewValues;
+    private bool _hasNewHandValues;
 
     private void Awake()
     {
@@ -86,14 +103,21 @@ public sealed class JoystickSerial : MonoBehaviour
 
         lock (_lock)
         {
-            if (!_hasNewValues)
-                return;
+            if (_hasNewValues)
+            {
+                _hasNewValues = false;
+                Up = _latest[0] != 0;
+                Down = _latest[1] != 0;
+                Left = _latest[2] != 0;
+                Right = _latest[3] != 0;
+            }
 
-            _hasNewValues = false;
-            Up = _latest[0] != 0;
-            Down = _latest[1] != 0;
-            Left = _latest[2] != 0;
-            Right = _latest[3] != 0;
+            if (_hasNewHandValues)
+            {
+                _hasNewHandValues = false;
+                HandLeftMm = _latestHands[0];
+                HandRightMm = _latestHands[1];
+            }
         }
     }
 
@@ -106,6 +130,17 @@ public sealed class JoystickSerial : MonoBehaviour
         Down = v.y < -ArcadeAxisThreshold;
         Left = v.x < -ArcadeAxisThreshold;
         Right = v.x > ArcadeAxisThreshold;
+
+        // The cabinet IS a combined board, so this class's own hand-sensor fields
+        // get the cabinet's heights too, in the same millimetres the "G," parser
+        // above would have produced. GestureInput's combined-board branch only
+        // fires for player-1/PlayerLeft and only while GestureSensorSerial is
+        // disconnected, so in practice the cabinet reads its hands through
+        // GestureSensorSerial (which mirrors both player slots and therefore also
+        // serves the solo PlayerRight) — but leaving these at -1 would quietly
+        // strand the author's branch the moment that condition changes.
+        HandLeftMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightA);
+        HandRightMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightB);
     }
 
     private void RunLoop()
@@ -252,26 +287,47 @@ public sealed class JoystickSerial : MonoBehaviour
 
     // Expects "J,<up>,<down>,<left>,<right>" — see ArduinoFirmware/Joystick
     // for the exact protocol this is matched against. Each field is 0/1.
+    // A combined board (ArduinoFirmware/CombinedBoard) also sends
+    // "G,<left_mm>,<right_mm>,<brake>,-1,-1,0" on its own line, same
+    // 7-field shape GestureSensorSerial's own dedicated-board protocol
+    // uses — only the first 2 fields (this board's one player's worth of
+    // sensors) are kept; the rest (brake, player 2's slot) don't apply here.
     private void ParseLine(string trimmedLine)
     {
-        if (!trimmedLine.StartsWith("J,"))
-            return;
-
-        string[] fields = trimmedLine.Split(',');
-        if (fields.Length != 5)
-            return;
-
-        int[] values = new int[4];
-        for (int i = 0; i < 4; i++)
+        if (trimmedLine.StartsWith("J,"))
         {
-            if (!int.TryParse(fields[i + 1], out values[i]))
+            string[] fields = trimmedLine.Split(',');
+            if (fields.Length != 5)
                 return;
-        }
 
-        lock (_lock)
+            int[] values = new int[4];
+            for (int i = 0; i < 4; i++)
+            {
+                if (!int.TryParse(fields[i + 1], out values[i]))
+                    return;
+            }
+
+            lock (_lock)
+            {
+                Array.Copy(values, _latest, 4);
+                _hasNewValues = true;
+            }
+        }
+        else if (trimmedLine.StartsWith("G,"))
         {
-            Array.Copy(values, _latest, 4);
-            _hasNewValues = true;
+            string[] fields = trimmedLine.Split(',');
+            if (fields.Length != 7)
+                return;
+
+            int[] values = new int[2];
+            if (!int.TryParse(fields[1], out values[0]) || !int.TryParse(fields[2], out values[1]))
+                return;
+
+            lock (_lock)
+            {
+                Array.Copy(values, _latestHands, 2);
+                _hasNewHandValues = true;
+            }
         }
     }
 

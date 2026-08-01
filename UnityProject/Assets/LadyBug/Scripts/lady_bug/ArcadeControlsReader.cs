@@ -113,6 +113,25 @@ namespace LadyBug
             }
         }
 
+        /// <summary>
+        /// Span the normalized height is stretched over when handed to code that speaks the
+        /// hand-sensor protocol's millimetres. arcade-controls reports 0..1 with BIGGER meaning
+        /// CLOSER; GestureInput reads millimetres with SMALLER meaning closer and thresholds at
+        /// 100mm ("hand down") / 200mm ("hand up"), so a 0..300mm span both inverts the sense and
+        /// lands those two thresholds on even thirds of the sensor's travel.
+        /// </summary>
+        public const float HeightSensorSpanMm = 300f;
+
+        /// <summary>
+        /// Cabinet height (0..1, bigger = closer) -> the millimetres the game's own sensor
+        /// readers publish. Lives here, not in either serial reader, so the two of them cannot
+        /// drift apart on the cabinet's single pair of sensors.
+        /// </summary>
+        public static int HeightToSensorMm(float normalized)
+        {
+            return Mathf.RoundToInt((1f - Mathf.Clamp01(normalized)) * HeightSensorSpanMm);
+        }
+
         private static float ReadHeightSlow(MethodInfo controlGet, MethodInfo valueGet)
         {
             if (controlGet == null || valueGet == null) return 0f;

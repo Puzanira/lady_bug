@@ -66,14 +66,6 @@ public sealed class GestureSensorSerial : MonoBehaviour
     // keeps working through this same class, unchanged.
     private bool UseArcadeFacade => ArcadeControlsReader.Available;
 
-    // arcade-controls reports a height as 0..1 with BIGGER meaning the hand is
-    // CLOSER to the sensor; GestureInput reads millimetres with SMALLER meaning
-    // closer (<=DownThresholdMm is "hand down", >=UpThresholdMm is "hand up").
-    // Mapping the normalized value onto a 0..300mm span inverts it and lands the
-    // 100/200mm thresholds on even thirds of the stick's travel: near (1.0) -> 0mm
-    // -> hand down, far (0.0) -> 300mm -> hand up, mid (0.5) -> 150mm -> neutral.
-    private const float ArcadeHeightSpanMm = 300f;
-
     private void OnEnable()
     {
         if (UseArcadeFacade)
@@ -126,8 +118,11 @@ public sealed class GestureSensorSerial : MonoBehaviour
     {
         IsConnected = true;
 
-        int leftMm = Mathf.RoundToInt((1f - ArcadeControlsReader.HeightA) * ArcadeHeightSpanMm);
-        int rightMm = Mathf.RoundToInt((1f - ArcadeControlsReader.HeightB) * ArcadeHeightSpanMm);
+        // Normalized height -> the millimetres this class publishes; the mapping itself
+        // lives in ArcadeControlsReader so JoystickSerial's combined-board fields cannot
+        // drift away from it.
+        int leftMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightA);
+        int rightMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightB);
 
         Player1LeftMm = leftMm;
         Player1RightMm = rightMm;

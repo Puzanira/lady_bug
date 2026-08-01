@@ -34,7 +34,7 @@ public class ScoreManager : MonoBehaviour
         // Score is just an accumulating achievement now (its own leaderboard
         // category) — the win condition is distance travelled, checked
         // continuously in SpeedController, not score thresholds here.
-        _score = Mathf.Max(0, _score + delta);
+        _score += delta;
         UpdateText();
     }
 
