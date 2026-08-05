@@ -932,7 +932,17 @@ public class StartScreenController : MonoBehaviour
         }
 
         bool joystickConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
-        SetJoystickEnabled(joystickLeft, false);
+        // Menu navigation has to ride joystickLeft as well, not joystickRight
+        // alone: UpdateVisuals deactivates PlayerRight whenever 1 player is
+        // selected, and a JoystickInput on an inactive GameObject never runs
+        // Update — so its LeftDown/RightDown/UpHeld edges stay false forever no
+        // matter how enabled the component is. Symptom: on a 1-player cabinet
+        // the stick moved the side HUD indicator (that reads JoystickSerial
+        // directly) while the menu cursor and the row values sat still.
+        // PlayerLeft is always active here. This is menu-only — both BeginGame
+        // and BeginTraining run ApplyInputScheme, which turns joystickLeft back
+        // off before anyone can drive P1's bug with it.
+        SetJoystickEnabled(joystickLeft, joystickConnected);
         SetJoystickEnabled(joystickRight, joystickConnected);
 
         if (_selectedPlayers == 2)
