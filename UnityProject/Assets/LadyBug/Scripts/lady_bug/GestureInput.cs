@@ -55,6 +55,98 @@ public class GestureInput : MonoBehaviour
     private const int DownThresholdMm = 100;
     private const int UpThresholdMm = 200;
 
+    // Matches ArduinoFirmware NO_TARGET_MM — VL53L0X returns ~8190 mm with
+    // no close target; treat as -1 ("no reading") so graphs and flap logic
+    // don't see an 8000 mm spike when the hand leaves the sensor.
+    public const int NoTargetMm = 2000;
+
+    public static int SanitizeDistanceMm(int mm)
+    {
+        return mm < 0 || mm >= NoTargetMm ? -1 : mm;
+    }
+
+    public static bool DuckHeldFromDistances(int leftMm, int rightMm)
+    {
+        return HandStateForDistance(leftMm) == HandState.Down
+            && HandStateForDistance(rightMm) == HandState.Down;
+    }
+
+    public static bool LeanLeftHeldFromDistances(int leftMm, int rightMm)
+    {
+        return HandStateForDistance(leftMm) == HandState.Down
+            && HandStateForDistance(rightMm) == HandState.Up;
+    }
+
+    public static bool LeanRightHeldFromDistances(int leftMm, int rightMm)
+    {
+        return HandStateForDistance(leftMm) == HandState.Up
+            && HandStateForDistance(rightMm) == HandState.Down;
+    }
+
+    public static bool BothHandsUpFromDistances(int leftMm, int rightMm)
+    {
+        return HandStateForDistance(leftMm) == HandState.Up
+            && HandStateForDistance(rightMm) == HandState.Up;
+    }
+
+    // Live mm for debug HUD — reads serial directly so values don't freeze
+    // when GestureInput is temporarily disabled (menu, 1-player preview).
+    public static bool TryGetLiveHandDistances(GestureInput gesture, out int leftMm, out int rightMm)
+    {
+        leftMm = -1;
+        rightMm = -1;
+
+        var joystickBoard = JoystickSerial.Instance;
+        if (joystickBoard != null && joystickBoard.IsConnected && joystickBoard.HasHandSensors)
+        {
+            leftMm = joystickBoard.HandLeftMm;
+            rightMm = joystickBoard.HandRightMm;
+            return true;
+        }
+
+        var sensorBoard = GestureSensorSerial.Instance;
+        if (sensorBoard != null && sensorBoard.IsConnected && gesture != null
+            && gesture.gameObject.name.Contains("Left"))
+        {
+            leftMm = sensorBoard.Player1LeftMm;
+            rightMm = sensorBoard.Player1RightMm;
+            return true;
+        }
+
+        if (gesture != null && gesture.enabled && gesture.UseRealSensors)
+        {
+            leftMm = gesture.LeftHandDistanceMm;
+            rightMm = gesture.RightHandDistanceMm;
+            return leftMm >= 0 || rightMm >= 0;
+        }
+
+        return false;
+    }
+
+    public static bool HandIsUp(int mm) => HandStateForDistance(mm) == HandState.Up;
+    public static bool HandIsDown(int mm) => HandStateForDistance(mm) == HandState.Down;
+
+    public static bool BothHandsFlapping(HandFlapTracker left, HandFlapTracker right, int leftMm, int rightMm)
+    {
+        left.Observe(leftMm);
+        right.Observe(rightMm);
+        return left.IsFlapping && right.IsFlapping;
+    }
+
+    private static bool HaveRealSensorFeed(bool useRealSensors, bool isPlayerOne)
+    {
+        if (!useRealSensors)
+            return false;
+
+        if (GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected)
+            return isPlayerOne;
+
+        // CombinedBoard sensors are player-1 hardware; P1 = PlayerLeft / gestureLeft.
+        return JoystickSerial.Instance != null
+            && JoystickSerial.Instance.IsConnected
+            && JoystickSerial.Instance.HasHandSensors;
+    }
+
     // True while this player should read GestureSensorSerial instead of the
     // keyboard — set at runtime by StartScreenController when "Датчики" (real
     // hardware) is the chosen controller, as opposed to "Имитатор" (keyboard).
@@ -71,6 +163,29 @@ public class GestureInput : MonoBehaviour
     private void Awake()
     {
         _isPlayerOne = gameObject.name.Contains("Left");
+    }
+
+    private void OnDisable()
+    {
+        ClearInterpretedState();
+    }
+
+    private void ClearInterpretedState()
+    {
+        _leftHand = HandState.Neutral;
+        _rightHand = HandState.Neutral;
+        LeftHandDistanceMm = -1;
+        RightHandDistanceMm = -1;
+        JumpHeld = false;
+        JumpDown = false;
+        DuckHeld = false;
+        LeanLeftHeld = false;
+        LeanLeftDown = false;
+        LeanRightHeld = false;
+        LeanRightDown = false;
+        RealFlapDetected = false;
+        _leftFlapTracker.Reset();
+        _rightFlapTracker.Reset();
     }
 
     private HandState _leftHand;
@@ -101,24 +216,82 @@ public class GestureInput : MonoBehaviour
     private readonly RapidPressTracker _leftFlapPresses = new RapidPressTracker();
     private readonly RapidPressTracker _rightFlapPresses = new RapidPressTracker();
 
-    // Real hardware: both hands rhythmically flipping Up/Down together
-    // recently — the genuine physical "flapping arms like wings" gesture.
-    // A real flap naturally shows up as rapid alternation here.
-    private readonly FlapTracker _leftFlapTracker = new FlapTracker();
-    private readonly FlapTracker _rightFlapTracker = new FlapTracker();
+    // Real hardware: both hands rhythmically reversing distance — the
+    // genuine physical "flapping arms like wings" gesture. HandFlapTracker
+    // is also used by StartScreenController for menu navigation.
+    public class HandFlapTracker
+    {
+        private const float Window = 0.9f;
+        private const float MinSwingMm = 55f;
+        private const int RequiredSwings = 2;
+
+        private readonly List<float> _swingTimes = new List<float>();
+        private float _lastValue = -1f;
+        private float _extremeValue = -1f;
+        private int _direction; // -1 falling, +1 rising, 0 not established yet
+        private bool _hasLast;
+
+        public bool IsFlapping => _swingTimes.Count >= RequiredSwings;
+
+        public void Reset()
+        {
+            _swingTimes.Clear();
+            _hasLast = false;
+            _direction = 0;
+        }
+
+        public void Observe(int mm)
+        {
+            if (mm < 0)
+            {
+                _hasLast = false;
+                _swingTimes.RemoveAll(t => Time.time - t > Window);
+                return;
+            }
+
+            if (!_hasLast)
+            {
+                _lastValue = mm;
+                _extremeValue = mm;
+                _hasLast = true;
+            }
+            else
+            {
+                int newDirection = mm > _lastValue ? 1 : (mm < _lastValue ? -1 : _direction);
+                if (_direction != 0 && newDirection != 0 && newDirection != _direction)
+                {
+                    if (Mathf.Abs(_lastValue - _extremeValue) >= MinSwingMm)
+                    {
+                        _swingTimes.Add(Time.time);
+                        _extremeValue = _lastValue;
+                    }
+                }
+                if (newDirection != 0)
+                    _direction = newDirection;
+                _lastValue = mm;
+            }
+
+            _swingTimes.RemoveAll(t => Time.time - t > Window);
+        }
+    }
+
+    private readonly HandFlapTracker _leftFlapTracker = new HandFlapTracker();
+    private readonly HandFlapTracker _rightFlapTracker = new HandFlapTracker();
 
     public bool RealFlapDetected { get; private set; }
 
     private void Update()
     {
-        bool haveRealSensors = UseRealSensors && GestureSensorSerial.Instance != null;
+        bool haveRealSensors = HaveRealSensorFeed(UseRealSensors, _isPlayerOne);
         bool flapping;
 
         if (haveRealSensors)
         {
             GestureSensorSerial sensors = GestureSensorSerial.Instance;
-            bool useCombinedBoard = _isPlayerOne && !sensors.IsConnected
-                && JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
+            bool useCombinedBoard = (sensors == null || !sensors.IsConnected)
+                && JoystickSerial.Instance != null
+                && JoystickSerial.Instance.IsConnected
+                && JoystickSerial.Instance.HasHandSensors;
 
             if (useCombinedBoard)
             {
@@ -127,13 +300,13 @@ public class GestureInput : MonoBehaviour
                 // player 2's joystick on the same board/port (see
                 // JoystickSerial's own comment on why it, not
                 // GestureSensorSerial, ends up owning this data).
-                LeftHandDistanceMm = JoystickSerial.Instance.HandLeftMm;
-                RightHandDistanceMm = JoystickSerial.Instance.HandRightMm;
+                LeftHandDistanceMm = GestureInput.SanitizeDistanceMm(JoystickSerial.Instance.HandLeftMm);
+                RightHandDistanceMm = GestureInput.SanitizeDistanceMm(JoystickSerial.Instance.HandRightMm);
             }
             else
             {
-                LeftHandDistanceMm = _isPlayerOne ? sensors.Player1LeftMm : sensors.Player2LeftMm;
-                RightHandDistanceMm = _isPlayerOne ? sensors.Player1RightMm : sensors.Player2RightMm;
+                LeftHandDistanceMm = GestureInput.SanitizeDistanceMm(sensors.Player1LeftMm);
+                RightHandDistanceMm = GestureInput.SanitizeDistanceMm(sensors.Player1RightMm);
             }
 
             _leftHand = HandStateForDistance(LeftHandDistanceMm);
@@ -242,79 +415,6 @@ public class GestureInput : MonoBehaviour
                 _pressTimes.Add(Time.time);
 
             _pressTimes.RemoveAll(t => Time.time - t > Window);
-        }
-    }
-
-    // Detector for one hand, feeding RealFlapDetected — watches the raw mm
-    // reading directly (not the thresholded Up/Down/Neutral state) for a
-    // real reversal in direction: distance increasing, then decreasing (or
-    // vice versa), by at least MinSwingMm. Doesn't care where in the
-    // sensor's range that happens — a flap confined entirely to one zone
-    // (never actually crossing into Down or Up territory) still counts,
-    // unlike an earlier version of this that only recognized a full swing
-    // all the way from the Down threshold to the Up threshold.
-    //
-    // Requires RequiredSwings (2) within the window, not just 1 — a single
-    // qualifying reversal turned out to fire on plain hand repositioning
-    // too (e.g. settling into a duck pose overshoots slightly on the way
-    // down), both causing stray jumps and, worse, briefly suppressing
-    // DuckHeld/Lean (see the `if (flapping)` block in Update) for as long
-    // as that one stray swing stayed in the window — read as a delayed
-    // duck. Real flapping is repeated back-and-forth, so asking for a
-    // second reversal filters out a single settle-and-stop motion almost
-    // entirely while still being far quicker than the original version of
-    // this (which needed 3 full swings all the way between the absolute
-    // Down/Up thresholds). MinSwingMm raised alongside it (35 -> 55) so an
-    // ordinary hand wobble while moving to a pose doesn't rack up 2
-    // qualifying swings either.
-    private class FlapTracker
-    {
-        private const float Window = 0.9f;
-        private const float MinSwingMm = 55f;
-        private const int RequiredSwings = 2;
-
-        private readonly List<float> _swingTimes = new List<float>();
-        private float _lastValue = -1f;
-        private float _extremeValue = -1f;
-        private int _direction; // -1 falling, +1 rising, 0 not established yet
-        private bool _hasLast;
-
-        public bool IsFlapping => _swingTimes.Count >= RequiredSwings;
-
-        public void Observe(int mm)
-        {
-            if (mm >= 0)
-            {
-                if (!_hasLast)
-                {
-                    _lastValue = mm;
-                    _extremeValue = mm;
-                    _hasLast = true;
-                }
-                else
-                {
-                    int newDirection = mm > _lastValue ? 1 : (mm < _lastValue ? -1 : _direction);
-                    if (_direction != 0 && newDirection != 0 && newDirection != _direction)
-                    {
-                        // Direction just reversed at _lastValue — how far did
-                        // it travel since the last confirmed swing's turning
-                        // point? Only reset that reference point once a real
-                        // (not noise-sized) swing lands, so several small
-                        // jitter-sized reversals in a row can still add up to
-                        // one real swing instead of each resetting the other.
-                        if (Mathf.Abs(_lastValue - _extremeValue) >= MinSwingMm)
-                        {
-                            _swingTimes.Add(Time.time);
-                            _extremeValue = _lastValue;
-                        }
-                    }
-                    if (newDirection != 0)
-                        _direction = newDirection;
-                    _lastValue = mm;
-                }
-            }
-
-            _swingTimes.RemoveAll(t => Time.time - t > Window);
         }
     }
 }

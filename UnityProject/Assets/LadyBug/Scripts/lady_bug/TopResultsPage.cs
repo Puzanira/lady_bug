@@ -25,6 +25,7 @@ public class TopResultsPage : MonoBehaviour
     private const float TitleOnlyDuration = 0.55f;
 
     [SerializeField] private int category;
+    public int Category => category;
     [SerializeField] private Text titleText;
     // Parent of every row element (medals/values/photos/arrows) — toggled
     // as one unit for the "then the table appears" stage, see RevealSequence.

@@ -15,7 +15,7 @@ public class EntitySpawner : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float goodChance = 0.5f;
     [SerializeField] [Range(0f, 1f)] private float duckChance = 0.5f;
 
-    [SerializeField] private int laneCount = 3;
+    [SerializeField] private int laneCount = 1;
     [SerializeField] private float laneWidth = 3f;
     [SerializeField] private float spawnZ = 70f;
     [SerializeField] private float minInterval = 1.1f;
@@ -28,6 +28,18 @@ public class EntitySpawner : MonoBehaviour
     {
         if (DebugRunConfig.EmptyRoad)
             enabled = false;
+        ApplyAdaptiveLaneWidth();
+    }
+
+    public void ConfigureLanes(int count)
+    {
+        laneCount = count;
+        ApplyAdaptiveLaneWidth();
+    }
+
+    private void ApplyAdaptiveLaneWidth()
+    {
+        laneWidth = RoadLayout.LaneWidthFor(laneCount);
     }
 
     private void Start()
@@ -68,9 +80,13 @@ public class EntitySpawner : MonoBehaviour
             return;
 
         int lane = Random.Range(0, laneCount);
-        float x = (lane - (laneCount - 1) / 2f) * laneWidth;
+        float x = RoadLayout.LaneCenterX(lane, laneCount);
         Vector3 pos = new Vector3(x, prefab.transform.position.y, spawnZ);
-        Instantiate(prefab, pos, prefab.transform.rotation);
+        GameObject instance = Instantiate(prefab, pos, prefab.transform.rotation);
+        LaneObjectLayout.ApplyForLaneCount(instance, laneCount);
+        LaneWalker walker = instance.GetComponent<LaneWalker>();
+        if (walker != null)
+            walker.ConfigureLanes(laneCount, lane);
     }
 
     private GameObject PickPrefab()

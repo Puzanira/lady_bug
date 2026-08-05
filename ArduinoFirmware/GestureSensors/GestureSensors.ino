@@ -1,14 +1,12 @@
 // ============================================================
-//  LadyBugHitTheRoad — gesture sensors, one board, both players
+//  LadyBugHitTheRoad — gesture sensors (player 1 hands)
 // ============================================================
-// 4x VL53L0X (one over each hand) + 2 plain push buttons (one per player,
-// for braking — no distance sensor there, just a button to GND).
+// 2x VL53L0X (one over each hand).
 //
-// Wiring, distance sensors: GND, SCL and SDA are shared by all 4 (SCL->A5,
-// SDA->A4). VIN is NOT shared and does NOT go to a power rail — each
-// sensor's VIN goes to its own digital pin instead:
-//   D2 -> P1 left hand VIN    D3 -> P1 right hand VIN
-//   D4 -> P2 left hand VIN    D5 -> P2 right hand VIN
+// Wiring, distance sensors: GND, SCL and SDA are shared by both
+// (SCL->A5, SDA->A4). VIN is NOT shared and does NOT go to a power rail —
+// each sensor's VIN goes to its own digital pin instead:
+//   D2 -> left hand VIN    D3 -> right hand VIN
 // These breakout boards don't expose an XSHUT pin on the header (only
 // VIN/GND/SCL/SDA), which is normally how you'd disable a sensor to give it
 // a unique I2C address (they all default to the same one, 0x29). Powering
@@ -26,38 +24,30 @@
 // space in board"); Pololu's is a much lighter driver and was written with
 // exactly this multi-sensor pattern in mind.
 //
-// Wiring, brake buttons: one leg to the pin below, the other leg to GND —
-// internal pull-up means "not pressed" reads HIGH, "pressed" reads LOW.
-//   D6 -> P1 brake button
-//   D7 -> P2 brake button
-//
 // Output: one CSV line per full sweep, ~33 Hz:
-//   G,<p1_left_mm>,<p1_right_mm>,<p1_brake>,<p2_left_mm>,<p2_right_mm>,<p2_brake>
+//   G,<left_mm>,<right_mm>
 // -1 for a distance channel means "no valid target" (out of range/timeout),
 // same convention ArduinoFiles4WorkShop/ArduinoSource/Sensors_1 uses.
-// <p*_brake> is 0 or 1. Identity handshake matches the workshop sketches
-// too: sending '?' gets a "BOARD,GESTURE_SENSORS" reply, used by
+// Identity handshake matches the workshop sketches too: sending '?' gets a
+// "BOARD,GESTURE_SENSORS" reply, used by
 // UnityProject/Assets/Scripts/GestureSensorSerial.cs to find this board
 // among other serial devices.
 
 #include <Wire.h>
 #include <VL53L0X.h>
 
-const uint8_t SENSOR_COUNT = 4;
-const uint8_t VIN_PINS[SENSOR_COUNT] = { 2, 3, 4, 5 }; // each sensor's power switch, not a shared rail
-const uint8_t SENSOR_ADDR[SENSOR_COUNT] = { 0x30, 0x31, 0x32, 0x33 };
-const char *SENSOR_NAMES[SENSOR_COUNT] = { "P1_LEFT", "P1_RIGHT", "P2_LEFT", "P2_RIGHT" };
-
-const uint8_t P1_BRAKE_PIN = 6;
-const uint8_t P2_BRAKE_PIN = 7;
+const uint8_t SENSOR_COUNT = 2;
+const uint8_t VIN_PINS[SENSOR_COUNT] = { 2, 3 }; // each sensor's power switch, not a shared rail
+const uint8_t SENSOR_ADDR[SENSOR_COUNT] = { 0x30, 0x31 };
+const char *SENSOR_NAMES[SENSOR_COUNT] = { "LEFT", "RIGHT" };
 
 const unsigned long POLL_INTERVAL_MS = 30; // ~33 Hz, best case (see budget below)
 
 // How long each sensor spends actively measuring, every single reading —
 // longer = better range/reliability, shorter = faster updates. This board
-// reads 4 sensors back-to-back every loop, so a full sweep takes roughly
-// 4x this value in the worst case (all 4 sensors, every reading) — with
-// 66ms that's ~260ms (~3.8 sweeps/sec), which still leaves a handful of
+// reads 2 sensors back-to-back every loop, so a full sweep takes roughly
+// 2x this value in the worst case (both sensors, every reading) — with
+// 66ms that's ~130ms (~7.7 sweeps/sec), which still leaves a handful of
 // samples inside the 1.2s flap-detection window (GestureInput.FlapTracker).
 // Default (unset) is ~33ms, which was enough range for close objects but
 // too short for farther ones. If range still isn't enough, raise this —
@@ -85,9 +75,6 @@ void setup()
   Wire.begin();
   Serial.println("HELLO!");
   Serial.println("BOARD,GESTURE_SENSORS");
-
-  pinMode(P1_BRAKE_PIN, INPUT_PULLUP);
-  pinMode(P2_BRAKE_PIN, INPUT_PULLUP);
 
   // Keep every sensor powered off first, so bringing one up at a time
   // doesn't race against the others still sitting at the default 0x29
@@ -136,12 +123,6 @@ int read_sensor_mm(uint8_t index)
   return (int)mm;
 }
 
-// Pressed = LOW (internal pull-up, button ties the pin to GND).
-int read_brake(uint8_t pin)
-{
-  return digitalRead(pin) == LOW ? 1 : 0;
-}
-
 void loop()
 {
   read_identity_request();
@@ -150,15 +131,7 @@ void loop()
   lastPoll = millis();
 
   Serial.print("G,");
-  Serial.print(read_sensor_mm(0)); // P1 left
+  Serial.print(read_sensor_mm(0)); // left
   Serial.print(",");
-  Serial.print(read_sensor_mm(1)); // P1 right
-  Serial.print(",");
-  Serial.print(read_brake(P1_BRAKE_PIN));
-  Serial.print(",");
-  Serial.print(read_sensor_mm(2)); // P2 left
-  Serial.print(",");
-  Serial.print(read_sensor_mm(3)); // P2 right
-  Serial.print(",");
-  Serial.println(read_brake(P2_BRAKE_PIN));
+  Serial.println(read_sensor_mm(1)); // right
 }

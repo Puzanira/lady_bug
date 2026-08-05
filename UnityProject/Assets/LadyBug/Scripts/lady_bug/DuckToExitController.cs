@@ -9,7 +9,9 @@ namespace LadyBug
 // the old "hold brake 5s" exit trigger (braking was removed from every
 // control scheme). First 5s are silent; the next 5s show a visible
 // countdown, so releasing early is an obvious way to cancel. Releasing at
-// any point resets the whole thing back to zero.
+// any point resets the whole thing back to zero. The hold is tracked from
+// raw down-input (IsDuckInputHeld), not duck pose — a collision resets the
+// visual duck but must not zero the silent phase while down stays held.
 //
 // A dedicated physical exit button is coming to the controller too (exact
 // button not chosen yet — see GestureSensorSerial.ExitButtonPressed) —
@@ -49,7 +51,7 @@ public class DuckToExitController : MonoBehaviour
             return;
         }
 
-        if (!AreAllPlayersDucking())
+        if (!AreAllPlayersHoldingExit())
         {
             _holdTimer = 0f;
             SetCountdownVisible(false);
@@ -78,7 +80,10 @@ public class DuckToExitController : MonoBehaviour
         }
     }
 
-    private bool AreAllPlayersDucking()
+    // Raw down-input held — not IsDucking. A crash resets duck pose/state but
+    // the player may still be holding down for exit; counting that as "released"
+    // was resetting the silent phase mid-hold.
+    private bool AreAllPlayersHoldingExit()
     {
         PlayerController[] players = FindObjectsByType<PlayerController>();
         if (players.Length == 0)
@@ -86,7 +91,7 @@ public class DuckToExitController : MonoBehaviour
 
         foreach (var p in players)
         {
-            if (!p.IsDucking)
+            if (!p.IsDuckInputHeld)
                 return false;
         }
         return true;

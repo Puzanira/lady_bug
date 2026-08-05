@@ -18,6 +18,7 @@
 // Same values as GestureSensors.ino — see the comments there for why.
 const uint32_t MEASUREMENT_BUDGET_US = 66000;
 const uint16_t SENSOR_TIMEOUT_MS = 150;
+const int NO_TARGET_MM = 2000;
 
 VL53L0X sensor;
 
@@ -43,6 +44,8 @@ void loop()
 
   if (sensor.timeoutOccurred())
     Serial.println("TIMEOUT");
+  else if (mm >= NO_TARGET_MM)
+    Serial.println("NO_TARGET");
   else
     Serial.println(mm);
 

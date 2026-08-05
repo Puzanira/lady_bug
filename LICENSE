@@ -1,0 +1,82 @@
+LadyBugHitTheRoad — условия использования
+=========================================
+
+Copyright (c) 2026 Anton Mikhalev
+
+В этом репозитории действуют ДВЕ разные лицензии — на код и на всё остальное.
+Сторонние материалы под свои лицензии не попадают ни под одну из них: их
+перечень и условия — в THIRD_PARTY_NOTICES.md.
+
+
+1. КОД — MIT
+------------
+
+Под MIT попадают:
+  UnityProject/Assets/Scripts/**      (весь рантайм-код)
+  UnityProject/Assets/Editor/**       (SceneSetup.cs, BuildScript.cs и др.)
+  UnityProject/Assets/Shaders/**
+  ArduinoFirmware/**                  (все прошивки)
+
+MIT License
+
+Copyright (c) 2026 Anton Mikhalev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+2. АРТ, ЗВУК, ДОКУМЕНТАЦИЯ — CC BY-NC 4.0
+------------------------------------------
+
+Creative Commons Attribution-NonCommercial 4.0 International
+https://creativecommons.org/licenses/by-nc/4.0/
+Полный текст: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+Коротко: использовать, изменять и распространять можно — при условии указания
+авторства (Anton Mikhalev) и только в некоммерческих целях.
+
+Под CC BY-NC 4.0 попадают:
+  UnityProject/Assets/Sprites/**      (кроме сторонних — см. п. 3)
+  UnityProject/Assets/Audio/**        (кроме сторонних — см. п. 3)
+  UnityProject/Assets/Resources/**    (кроме шрифта — см. п. 3)
+  RawAssets/**                        (кроме сторонних — см. п. 3)
+  docs/**, README.md
+
+Сюда же входят спрайты, перенесённые из более ранней Flash-игры того же автора
+(LadybugAdventures) — они его собственные.
+
+Сгенерированные (`Assets/Sprites/**`, `RawAssets/panel/generated/**`) сюда
+формально включены, но см. оговорку про ИИ-контент в THIRD_PARTY_NOTICES.md —
+в ряде юрисдикций у чисто машинно-сгенерированных изображений автор-человек
+не признаётся, и тогда лицензировать их попросту нечем.
+
+
+3. СТОРОННИЕ МАТЕРИАЛЫ — свои лицензии
+---------------------------------------
+
+Ни MIT, ни CC BY-NC на них НЕ распространяются, и автор этого репозитория
+не может изменить их условия. Полный перечень с авторами, лицензиями и
+ссылками: THIRD_PARTY_NOTICES.md.
+
+Сюда входят звуковые эффекты и музыка с mixkit.co, спрайты конфетти и салюта
+с OpenGameArt (CC0), шрифт ComicCAT, и содержимое
+RawAssets/swf/LadybugAdventures.swf, внутри которого зашиты чужой шрифт и
+музыка под CC-BY.
+
+
+Вопросы по лицензированию: https://github.com/tony20202021/lady_bug

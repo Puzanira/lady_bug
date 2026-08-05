@@ -18,6 +18,8 @@ public class CloudSpawner : MonoBehaviour
     [SerializeField] private float minY = 8f;
     [SerializeField] private float maxY = 16f;
     [SerializeField] private float spawnZ = 90f;
+    // Random depth jitter so clouds sometimes pass in front of birds, sometimes behind.
+    [SerializeField] private float spawnZJitter = 7f;
     [SerializeField] private float minInterval = 4f;
     [SerializeField] private float maxInterval = 9f;
 
@@ -51,7 +53,8 @@ public class CloudSpawner : MonoBehaviour
     private void Spawn()
     {
         GameObject prefab = prefabs[Random.Range(0, prefabs.Length)];
-        Vector3 pos = new Vector3(Random.Range(minX, maxX), Random.Range(minY, maxY), spawnZ);
+        float z = spawnZ + Random.Range(-spawnZJitter, spawnZJitter);
+        Vector3 pos = new Vector3(Random.Range(minX, maxX), Random.Range(minY, maxY), z);
         Instantiate(prefab, pos, prefab.transform.rotation);
     }
 }

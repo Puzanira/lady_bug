@@ -18,7 +18,7 @@ namespace LadyBug
 public class LaneWalker : MonoBehaviour
 {
     [SerializeField] private float laneWidth = 4f;
-    [SerializeField] private int laneCount = 3;
+    [SerializeField] private int laneCount = 1;
     [SerializeField] private float moveSpeed = 1.5f;
     [SerializeField] private float minDelay = 1.5f;
     [SerializeField] private float maxDelay = 4f;
@@ -37,9 +37,30 @@ public class LaneWalker : MonoBehaviour
     // right now — read by SnakePose to pick between its idle/moving sprite.
     public bool IsMoving => _moving;
 
+    public void ConfigureLanes(int count, int? snapLane = null)
+    {
+        laneCount = Mathf.Max(1, count);
+        laneWidth = RoadLayout.LaneWidthFor(laneCount);
+        if (snapLane.HasValue)
+            _lane = Mathf.Clamp(snapLane.Value, 0, laneCount - 1);
+        else
+            _lane = LaneFromWorldX(transform.position.x);
+        Vector3 pos = transform.position;
+        pos.x = RoadLayout.LaneCenterX(_lane, laneCount);
+        transform.position = pos;
+    }
+
+    private int LaneFromWorldX(float worldX) =>
+        Mathf.Clamp(Mathf.RoundToInt(worldX / laneWidth + (laneCount - 1) / 2f), 0, laneCount - 1);
+
+    private void Awake()
+    {
+        laneWidth = RoadLayout.LaneWidthFor(laneCount);
+    }
+
     private void Start()
     {
-        _lane = Mathf.RoundToInt(transform.position.x / laneWidth + (laneCount - 1) / 2f);
+        _lane = LaneFromWorldX(transform.position.x);
         ScheduleNext();
 
         Transform found = transform.Find("Sprite");
@@ -66,7 +87,7 @@ public class LaneWalker : MonoBehaviour
             return;
         }
 
-        float targetX = (_lane - (laneCount - 1) / 2f) * laneWidth;
+        float targetX = RoadLayout.LaneCenterX(_lane, laneCount);
         Vector3 pos = transform.position;
         pos.x = Mathf.MoveTowards(pos.x, targetX, moveSpeed * Time.deltaTime);
         transform.position = pos;

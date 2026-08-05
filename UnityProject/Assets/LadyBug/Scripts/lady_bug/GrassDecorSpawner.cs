@@ -10,7 +10,7 @@ public class GrassDecorSpawner : MonoBehaviour
     [SerializeField] private GameObject[] prefabs;
     [SerializeField] private float roadHalfWidth = 8f;
     [SerializeField] private float shoulderWidth = 2.5f;
-    [SerializeField] private float pavementOverlap = 0.5f;
+    [SerializeField] private float shoulderGap = RoadGeometryRuntime.ShoulderGap;
     [SerializeField] private float innerSpawnMargin = 0.5f;
     [SerializeField] private float maxOffsetFromShoulder = 12f;
     [SerializeField] private float spawnZ = 70f;
@@ -46,6 +46,11 @@ public class GrassDecorSpawner : MonoBehaviour
         _nextSpawnDistance = Random.Range(minSpawnDistance, maxSpawnDistance);
     }
 
+    public void ConfigureRoadHalfWidth(float halfWidth)
+    {
+        roadHalfWidth = halfWidth;
+    }
+
     private void Spawn()
     {
         if (prefabs == null || prefabs.Length == 0)
@@ -64,7 +69,7 @@ public class GrassDecorSpawner : MonoBehaviour
         float halfWidth = info != null ? info.visibleHalfWidth : 0.2f;
         float visibleHeight = info != null ? info.visibleHeight : 0.4f;
 
-        float grassInnerEdge = roadHalfWidth + shoulderWidth - pavementOverlap;
+        float grassInnerEdge = roadHalfWidth + shoulderGap + shoulderWidth + shoulderGap;
         float inner = grassInnerEdge + innerSpawnMargin + halfWidth;
         float outer = grassInnerEdge + maxOffsetFromShoulder - halfWidth;
         if (inner > outer)

@@ -23,6 +23,7 @@ public class JoystickInput : MonoBehaviour
     public bool UpHeld { get; private set; }
     public bool UpDown { get; private set; }
     public bool DownHeld { get; private set; }
+    public bool DownDown { get; private set; }
     public bool LeftHeld { get; private set; }
     public bool LeftDown { get; private set; }
     public bool RightHeld { get; private set; }
@@ -39,6 +40,7 @@ public class JoystickInput : MonoBehaviour
         UpDown = up && !UpHeld;
         UpHeld = up;
 
+        DownDown = down && !DownHeld;
         DownHeld = down;
 
         LeftDown = left && !LeftHeld;

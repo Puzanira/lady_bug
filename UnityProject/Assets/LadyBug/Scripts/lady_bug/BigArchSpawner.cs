@@ -10,6 +10,7 @@ namespace LadyBug
 public class BigArchSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject prefab;
+    [SerializeField] private int laneCount = 1;
     [SerializeField] private float spawnZ = 70f;
     [SerializeField] private float minInterval = 9f;
     [SerializeField] private float maxInterval = 16f;
@@ -45,9 +46,23 @@ public class BigArchSpawner : MonoBehaviour
         {
             _timer = 0f;
             Vector3 pos = new Vector3(0f, prefab.transform.position.y, spawnZ);
-            Instantiate(prefab, pos, prefab.transform.rotation);
+            GameObject instance = Instantiate(prefab, pos, prefab.transform.rotation);
+            ApplySpan(instance);
             ScheduleNext();
         }
+    }
+
+    public void ConfigureLanes(int count)
+    {
+        laneCount = Mathf.Clamp(count, RoadLayout.MinLaneCount, RoadLayout.MaxLaneCount);
+    }
+
+    private void ApplySpan(GameObject instance)
+    {
+        BigArchLayout layout = instance.GetComponent<BigArchLayout>();
+        if (layout == null)
+            layout = instance.AddComponent<BigArchLayout>();
+        layout.ApplySpan(laneCount);
     }
 
     private void ScheduleNext()

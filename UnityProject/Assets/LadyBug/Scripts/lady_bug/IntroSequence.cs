@@ -54,7 +54,7 @@ public class IntroSequence : MonoBehaviour
 
     // Big countdown — 5-4-3-2-1, then "СТАРТ", held a moment (with a
     // pulse/shake, see PulseStart), before revealing the start menu. Real
-    // generated graffiti artwork (yandex_api/gen_asset.sh), one transparent
+    // generated graffiti artwork (asset_gen/gen_asset.sh), one transparent
     // texture per step (drawn right over the flowers, no wall behind it
     // anymore), swapped on this one RawImage — countdownTextures[0..4] are
     // 5/4/3/2/1, [5] is "СТАРТ".

@@ -14,16 +14,45 @@ public class GestureIndicator : MonoBehaviour
     [SerializeField] private GestureInput gestureInput;
     [SerializeField] private Text indicatorText;
 
+    private readonly GestureInput.HandFlapTracker _leftFlapTracker = new GestureInput.HandFlapTracker();
+    private readonly GestureInput.HandFlapTracker _rightFlapTracker = new GestureInput.HandFlapTracker();
+
     private void Update()
     {
-        if (indicatorText == null || gestureInput == null)
+        if (indicatorText == null)
             return;
 
-        indicatorText.text = HandGlyph(gestureInput.LeftHandUp, gestureInput.LeftHandDown)
-                            + "  "
-                            + FlapGlyph(gestureInput.JumpHeld)
-                            + "  "
-                            + HandGlyph(gestureInput.RightHandUp, gestureInput.RightHandDown);
+        if (UsesLinkedGestureInput())
+        {
+            indicatorText.text = HandGlyph(gestureInput.LeftHandUp, gestureInput.LeftHandDown)
+                                + "  "
+                                + FlapGlyph(gestureInput.JumpHeld)
+                                + "  "
+                                + HandGlyph(gestureInput.RightHandUp, gestureInput.RightHandDown);
+            return;
+        }
+
+        if (GestureInput.TryGetLiveHandDistances(gestureInput, out int leftMm, out int rightMm))
+        {
+            bool flapping = GestureInput.BothHandsFlapping(
+                _leftFlapTracker, _rightFlapTracker, leftMm, rightMm);
+            indicatorText.text = HandGlyph(GestureInput.HandIsUp(leftMm), GestureInput.HandIsDown(leftMm))
+                                + "  "
+                                + FlapGlyph(flapping)
+                                + "  "
+                                + HandGlyph(GestureInput.HandIsUp(rightMm), GestureInput.HandIsDown(rightMm));
+            return;
+        }
+
+        indicatorText.text = "<color=#555555>–</color>  <color=#555555>–</color>  <color=#555555>–</color>";
+    }
+
+    private bool UsesLinkedGestureInput()
+    {
+        return gestureInput != null
+            && gestureInput.enabled
+            && gestureInput.UseRealSensors
+            && gestureInput.gameObject.activeInHierarchy;
     }
 
     private static string HandGlyph(bool up, bool down)

@@ -47,6 +47,11 @@ public class SideScenerySpawner : MonoBehaviour
         _nextSpawnDistance = Random.Range(minSpawnDistance, maxSpawnDistance);
     }
 
+    public void ConfigureSideOffset(float offset)
+    {
+        sideOffset = offset;
+    }
+
     // One object on EACH side every tick (not a coin-flip for a single
     // side) — a coin-flip let one side go quiet for several spawns in a
     // row while the other kept getting objects, leaving empty stretches of

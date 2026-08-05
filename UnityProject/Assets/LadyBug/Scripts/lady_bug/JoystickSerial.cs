@@ -40,10 +40,9 @@ public sealed class JoystickSerial : MonoBehaviour
     public bool Left { get; private set; }
     public bool Right { get; private set; }
 
-    // Only ever populated if the connected board actually sends a "G,..."
-    // line (the combined joystick+sensors variant) — stays at the -1 "no
-    // valid target" default forever on a plain joystick-only board, which
-    // GestureInput already treats as "no reading" (see HandStateForDistance).
+    // Only ever populated if the connected board sends hand readings (the
+    // combined G+J line from CombinedBoard, or a legacy separate "G,..." line).
+    public bool HasHandSensors { get; private set; }
     public int HandLeftMm { get; private set; } = -1;
     public int HandRightMm { get; private set; } = -1;
 
@@ -55,6 +54,9 @@ public sealed class JoystickSerial : MonoBehaviour
     private readonly int[] _latestHands = { -1, -1 };
     private bool _hasNewValues;
     private bool _hasNewHandValues;
+    private bool _wasConnected;
+    private float _lastHandValuesTime;
+    private const float HandValuesStaleSeconds = 0.5f;
 
     private void Awake()
     {
@@ -63,9 +65,12 @@ public sealed class JoystickSerial : MonoBehaviour
 
     // Arcade cabinet: never open the port here — the hub's arcade-controls package
     // already owns the one combo board that carries this joystick (see the same
-    // note on GestureSensorSerial). The switch state comes from
-    // ArcadeInput.Joystick instead, so JoystickInput and everything above it are
-    // untouched.
+    // note on GestureSensorSerial). Since the protocol simplification the combo
+    // board sends the joystick AND both hand sensors as ONE
+    // "G,<left>,<right>,J,<u>,<d>,<l>,<r>" line, so a second reader on the port
+    // would tear that single frame in half — all the more reason to stay off it.
+    // The switch state comes from ArcadeInput.Joystick instead, so JoystickInput
+    // and everything above it are untouched.
     private bool UseArcadeFacade => ArcadeControlsReader.Available;
 
     // The cabinet stick is analog (-1..1 per axis); the author's own firmware
@@ -99,7 +104,13 @@ public sealed class JoystickSerial : MonoBehaviour
             return;
         }
 
-        IsConnected = _connected;
+        bool connected = _connected;
+        IsConnected = connected;
+
+        if (!connected && _wasConnected)
+            ClearHandReadings();
+
+        _wasConnected = connected;
 
         lock (_lock)
         {
@@ -117,7 +128,15 @@ public sealed class JoystickSerial : MonoBehaviour
                 _hasNewHandValues = false;
                 HandLeftMm = _latestHands[0];
                 HandRightMm = _latestHands[1];
+                _lastHandValuesTime = Time.realtimeSinceStartup;
             }
+        }
+
+        if (HasHandSensors
+            && connected
+            && Time.realtimeSinceStartup - _lastHandValuesTime > HandValuesStaleSeconds)
+        {
+            ClearHandReadings();
         }
     }
 
@@ -133,14 +152,20 @@ public sealed class JoystickSerial : MonoBehaviour
 
         // The cabinet IS a combined board, so this class's own hand-sensor fields
         // get the cabinet's heights too, in the same millimetres the "G," parser
-        // above would have produced. GestureInput's combined-board branch only
-        // fires for player-1/PlayerLeft and only while GestureSensorSerial is
-        // disconnected, so in practice the cabinet reads its hands through
-        // GestureSensorSerial (which mirrors both player slots and therefore also
-        // serves the solo PlayerRight) — but leaving these at -1 would quietly
-        // strand the author's branch the moment that condition changes.
+        // below would have produced. HasHandSensors is what gates every downstream
+        // combined-board branch (GestureInput.TryGetLiveHandDistances /
+        // HaveRealSensorFeed, GameplayHudVisibility.HasSensorHudFeed,
+        // StartScreenController's sensor preview) — leaving it false would strand
+        // all of them on a cabinet that demonstrably has both sensors.
+        HasHandSensors = true;
         HandLeftMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightA);
         HandRightMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightB);
+    }
+
+    private void ClearHandReadings()
+    {
+        HandLeftMm = -1;
+        HandRightMm = -1;
     }
 
     private void RunLoop()
@@ -202,46 +227,70 @@ public sealed class JoystickSerial : MonoBehaviour
 
     private bool TryIdentify(string portPath)
     {
-        int fd = OpenPort(portPath);
-        if (fd < 0)
-            return false;
-
-        try
+        lock (MacSerialPort.ProbeLock)
         {
-            WriteAscii(fd, "?");
-
-            DateTime deadline = DateTime.UtcNow.AddSeconds(identificationTimeout);
-            StringBuilder line = new StringBuilder();
-            byte[] buffer = new byte[1];
-
-            while (DateTime.UtcNow < deadline)
+            int fd = OpenPort(portPath);
+            if (fd < 0)
             {
-                long read = MacNative.read(fd, buffer, (UIntPtr)1);
-                if (read <= 0)
-                {
-                    Thread.Sleep(5);
-                    continue;
-                }
-
-                char c = (char)buffer[0];
-                if (c == '\n')
-                {
-                    if (line.ToString().Trim() == "BOARD,JOYSTICK")
-                        return true;
-                    line.Length = 0;
-                }
-                else if (c != '\r')
-                {
-                    line.Append(c);
-                }
+                Debug.LogWarning("[JoystickSerial] Cannot open " + portPath
+                    + " — close Arduino Serial Monitor / Plotter if it's using this port.");
+                return false;
             }
 
-            return false;
+            try
+            {
+                MacSerialPort.SetDtr(fd, true);
+                Thread.Sleep(800);
+                MacNative.tcflush(fd, MacNative.FlushInputAndOutput);
+                WriteAscii(fd, "?");
+
+                DateTime deadline = DateTime.UtcNow.AddSeconds(identificationTimeout);
+                StringBuilder line = new StringBuilder();
+                byte[] buffer = new byte[1];
+
+                while (DateTime.UtcNow < deadline)
+                {
+                    long read = MacNative.read(fd, buffer, (UIntPtr)1);
+                    if (read <= 0)
+                    {
+                        Thread.Sleep(5);
+                        continue;
+                    }
+
+                    char c = (char)buffer[0];
+                    if (c == '\n')
+                    {
+                        string trimmed = line.ToString().Trim();
+                        line.Length = 0;
+                        if (trimmed == "BOARD,JOYSTICK" || IsJoystickDataLine(trimmed))
+                            return true;
+                        if (trimmed == "BOARD,GESTURE_SENSORS")
+                            return false;
+                    }
+                    else if (c != '\r')
+                    {
+                        line.Append(c);
+                    }
+                }
+
+                return false;
+            }
+            finally
+            {
+                MacNative.close(fd);
+            }
         }
-        finally
-        {
-            MacNative.close(fd);
-        }
+    }
+
+    static bool IsJoystickDataLine(string line)
+    {
+        if (line.StartsWith("J,"))
+            return line.Split(',').Length == 5;
+        if (line.StartsWith("G,") && line.IndexOf(",J,", StringComparison.Ordinal) >= 0)
+            return line.Split(',').Length == 8;
+        if (line.StartsWith("G,"))
+            return line.Split(',').Length == 3;
+        return false;
     }
 
     private void ReadFromPort(string portPath)
@@ -252,7 +301,13 @@ public sealed class JoystickSerial : MonoBehaviour
 
         try
         {
+            MacSerialPort.SetDtr(fd, true);
+            Thread.Sleep(600);
+            MacNative.tcflush(fd, MacNative.FlushInputAndOutput);
+
             _connected = true;
+            HasHandSensors = false;
+            ClearHandReadings();
             Debug.Log("[JoystickSerial] Connected: " + portPath);
 
             StringBuilder line = new StringBuilder();
@@ -285,49 +340,72 @@ public sealed class JoystickSerial : MonoBehaviour
         }
     }
 
-    // Expects "J,<up>,<down>,<left>,<right>" — see ArduinoFirmware/Joystick
-    // for the exact protocol this is matched against. Each field is 0/1.
-    // A combined board (ArduinoFirmware/CombinedBoard) also sends
-    // "G,<left_mm>,<right_mm>,<brake>,-1,-1,0" on its own line, same
-    // 7-field shape GestureSensorSerial's own dedicated-board protocol
-    // uses — only the first 2 fields (this board's one player's worth of
-    // sensors) are kept; the rest (brake, player 2's slot) don't apply here.
+    // CombinedBoard: "G,<left_mm>,<right_mm>,J,<up>,<down>,<left>,<right>"
+    // Standalone Joystick: "J,<up>,<down>,<left>,<right>" only.
     private void ParseLine(string trimmedLine)
     {
-        if (trimmedLine.StartsWith("J,"))
+        if (trimmedLine.StartsWith("G,", StringComparison.Ordinal))
         {
-            string[] fields = trimmedLine.Split(',');
-            if (fields.Length != 5)
+            int jMarker = trimmedLine.IndexOf(",J,", StringComparison.Ordinal);
+            if (jMarker >= 0)
+            {
+                ParseGestureFields(trimmedLine.Substring(0, jMarker));
+                ParseJoystickFields(trimmedLine.Substring(jMarker + 1));
                 return;
-
-            int[] values = new int[4];
-            for (int i = 0; i < 4; i++)
-            {
-                if (!int.TryParse(fields[i + 1], out values[i]))
-                    return;
             }
 
-            lock (_lock)
-            {
-                Array.Copy(values, _latest, 4);
-                _hasNewValues = true;
-            }
+            ParseGestureFields(trimmedLine);
+            return;
         }
-        else if (trimmedLine.StartsWith("G,"))
+
+        if (trimmedLine.StartsWith("J,", StringComparison.Ordinal))
+            ParseJoystickFields(trimmedLine);
+    }
+
+    private void ParseJoystickFields(string trimmedLine)
+    {
+        if (!trimmedLine.StartsWith("J,", StringComparison.Ordinal))
+            return;
+
+        string[] fields = trimmedLine.Split(',');
+        if (fields.Length != 5)
+            return;
+
+        int[] values = new int[4];
+        for (int i = 0; i < 4; i++)
         {
-            string[] fields = trimmedLine.Split(',');
-            if (fields.Length != 7)
+            if (!int.TryParse(fields[i + 1], out values[i]))
                 return;
+        }
 
-            int[] values = new int[2];
-            if (!int.TryParse(fields[1], out values[0]) || !int.TryParse(fields[2], out values[1]))
-                return;
+        lock (_lock)
+        {
+            Array.Copy(values, _latest, 4);
+            _hasNewValues = true;
+        }
+    }
 
-            lock (_lock)
-            {
-                Array.Copy(values, _latestHands, 2);
-                _hasNewHandValues = true;
-            }
+    private void ParseGestureFields(string trimmedLine)
+    {
+        if (!trimmedLine.StartsWith("G,", StringComparison.Ordinal))
+            return;
+
+        string[] fields = trimmedLine.Split(',');
+        if (fields.Length != 3)
+            return;
+
+        int[] values = new int[2];
+        if (!int.TryParse(fields[1], out values[0]) || !int.TryParse(fields[2], out values[1]))
+            return;
+
+        values[0] = GestureInput.SanitizeDistanceMm(values[0]);
+        values[1] = GestureInput.SanitizeDistanceMm(values[1]);
+
+        lock (_lock)
+        {
+            HasHandSensors = true;
+            Array.Copy(values, _latestHands, 2);
+            _hasNewHandValues = true;
         }
     }
 

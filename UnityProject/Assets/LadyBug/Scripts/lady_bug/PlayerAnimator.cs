@@ -20,6 +20,9 @@ public class PlayerAnimator : MonoBehaviour
     [SerializeField] private float flapCycleSpeed = 22f;
     [SerializeField] private Texture2D[] groundFrames; // walk-cycle order
     [SerializeField] private Texture2D[] airFrames; // wing-flap cycle order
+
+    public Texture2D[] GroundFrames => groundFrames;
+    public Texture2D[] AirFrames => airFrames;
     [SerializeField] private float legFrameInterval = 0.12f;
     [SerializeField] private float wingFrameInterval = 0.09f; // flapping reads faster than running legs
     // Animation pace follows CurrentSpeed (min..max km/h) between these two
@@ -98,6 +101,14 @@ public class PlayerAnimator : MonoBehaviour
 
         if (_spriteRenderer != null && groundFrames != null && groundFrames.Length > 0)
             _spriteRenderer.material.mainTexture = groundFrames[0];
+    }
+
+    // PlayerBugVisuals swaps walk/flap frames when solo vs 2-player look changes.
+    public void SetBugFrames(Texture2D[] ground, Texture2D[] air)
+    {
+        groundFrames = ground;
+        airFrames = air;
+        HoldIdlePose();
     }
 
     private void ResetCycle()

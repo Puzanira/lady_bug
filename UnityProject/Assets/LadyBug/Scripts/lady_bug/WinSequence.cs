@@ -11,7 +11,12 @@ public class WinSequence : MonoBehaviour
 {
     public static WinSequence Instance { get; private set; }
 
-    [SerializeField] private float winDistanceKm = 10f;
+    // One knob for goal distance — first finish and each «continue» extension
+    // add the same amount. 10 is the playable target; drop to 1 to reach the
+    // win cutscene quickly while testing it.
+    public const float WinSegmentDistanceKm = 10f;
+
+    private float winDistanceKm;
 
     // Exposed so the start-screen "ЦЕЛЬ" instructions can show the real
     // distance instead of a hardcoded number that'd lie while this is
@@ -24,7 +29,6 @@ public class WinSequence : MonoBehaviour
     // the real ending. See OfferContinue.
     [SerializeField] private GameObject continuePromptRoot;
     [SerializeField] private Text continueCountdownText;
-    [SerializeField] private float continueDistanceKm = 10f;
     private const int ContinueCountdownStart = 10;
     private bool _awaitingContinueDecision;
 
@@ -42,10 +46,17 @@ public class WinSequence : MonoBehaviour
     [SerializeField] private float newRecordAnnounceDuration = 5f;
 
     [SerializeField] private RectTransform winTextRoot;
+    [SerializeField] private RectTransform winCongratsTextRoot;
+    private Text _winText;
+    private Text _winCongratsText;
+    private WinCelebrationFx _winCelebration;
+    private const string WinTitlePlain = "ВЫ ПРОШЛИ ДО КОНЦА";
+    private const string WinCongratsPlain = "ПОЗДРАВЛЯЕМ!!!";
     // How long the title sits alone on screen at the very end, once
     // everything else (stats, records, leaderboard tables) has already
     // finished and hidden — see the end of RunSequence.
     [SerializeField] private float finalTitleHoldDuration = 4f;
+    private const float FinalCelebrationPostFxPause = 3f;
     // Shared dark-tint backdrop behind the stats pages — same treatment
     // every other table in the game uses.
     [SerializeField] private GameObject statsBackdrop;
@@ -83,6 +94,9 @@ public class WinSequence : MonoBehaviour
     // leaderboard category — same component the start-screen carousel uses.
     [SerializeField] private GameObject[] leaderboardPages;
 
+    // Left/right wedge HUD (distance, time, speed, score, tricks) — hidden
+    // once the post-win stats pages start so they don't overlap the recap.
+
     [SerializeField] private float entityFadeDuration = 3f;
     [SerializeField] private float flyDuration = 3f;
     [SerializeField] private float flyHeightGain = 20f;
@@ -100,6 +114,7 @@ public class WinSequence : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        winDistanceKm = WinSegmentDistanceKm;
         if (finishText != null)
             finishText.SetActive(false);
         if (newRecordAnnounceText != null)
@@ -107,7 +122,17 @@ public class WinSequence : MonoBehaviour
         if (continuePromptRoot != null)
             continuePromptRoot.SetActive(false);
         if (winTextRoot != null)
+        {
+            _winText = winTextRoot.GetComponent<Text>();
             winTextRoot.gameObject.SetActive(false);
+            Canvas canvas = winTextRoot.GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                EnsureWinCongratsText(canvas);
+                _winCelebration = WinCelebrationFx.Ensure(canvas);
+            }
+        }
+        SetFinalCelebrationVisible(false);
         if (statsBackdrop != null)
             statsBackdrop.SetActive(false);
         if (statsTitle != null)
@@ -170,6 +195,9 @@ public class WinSequence : MonoBehaviour
         if (SpeedController.Instance != null)
             SpeedController.Instance.EndWinBoost();
 
+        if (GameTimer.Instance != null)
+            GameTimer.Instance.Pause();
+
         if (continuePromptRoot != null)
             continuePromptRoot.SetActive(true);
 
@@ -199,7 +227,9 @@ public class WinSequence : MonoBehaviour
 
         if (flapped)
         {
-            winDistanceKm += continueDistanceKm;
+            if (GameTimer.Instance != null)
+                GameTimer.Instance.Resume();
+            winDistanceKm += WinSegmentDistanceKm;
             if (SpeedController.Instance != null)
                 SpeedController.Instance.CancelDecelerate();
             foreach (var spawner in FindObjectsByType<EntitySpawner>())
@@ -263,6 +293,10 @@ public class WinSequence : MonoBehaviour
             spawner.enabled = false;
         foreach (var cloud in FindObjectsByType<CloudDrift>())
             cloud.enabled = false;
+        foreach (var spawner in FindObjectsByType<BirdSpawner>())
+            spawner.enabled = false;
+        foreach (var bird in FindObjectsByType<SkyBird>())
+            bird.enabled = false;
         foreach (var sun in FindObjectsByType<SunArc>())
             sun.enabled = false;
 
@@ -335,6 +369,9 @@ public class WinSequence : MonoBehaviour
         if (SpeedController.Instance != null)
             SpeedController.Instance.EndWinBoost();
 
+        if (_winText != null)
+            _winText.text = WinTitlePlain;
+        SetFinalCelebrationVisible(false);
         if (winTextRoot != null)
             winTextRoot.gameObject.SetActive(true);
 
@@ -352,6 +389,11 @@ public class WinSequence : MonoBehaviour
             // now, see CaptureRecordPhoto's own comment on why the old
             // separate reveal line was dropped.
             newRecords = HighScoreManager.Instance.ReportRun(winTimestamp, score, tricks, maxSpeed, out ranksByCategory);
+        }
+
+        List<HighScoreManager.NewRecord> leaderboardRecords = newRecords;
+        if (newRecords != null)
+        {
             // The photo should only snap for an actual "record" the way the
             // player sees it on ИТОГИ ЗАБЕГА — top-3, not any top-10
             // placement. HighScoreManager still tracks/returns the full
@@ -368,6 +410,8 @@ public class WinSequence : MonoBehaviour
         // collapses straight to that reload instead of waiting out the rest.
         _skipToEnd = false;
 
+        HideGameplayHudPanels();
+
         if (statsBackdrop != null)
             statsBackdrop.SetActive(true);
         try
@@ -383,6 +427,7 @@ public class WinSequence : MonoBehaviour
             // the very end so it's still the last thing on screen.
             if (winTextRoot != null)
                 winTextRoot.gameObject.SetActive(false);
+            SetFinalCelebrationVisible(false);
 
             if (!_skipToEnd && newRecords != null && newRecords.Count > 0)
                 yield return StartCoroutine(CaptureRecordPhoto(newRecords));
@@ -393,19 +438,26 @@ public class WinSequence : MonoBehaviour
                 statsBackdrop.SetActive(false);
         }
 
-        if (!_skipToEnd && leaderboardPages != null)
-            yield return StartCoroutine(ShowLeaderboardTables());
+        if (!_skipToEnd && leaderboardRecords != null && leaderboardRecords.Count > 0)
+            yield return StartCoroutine(ShowLeaderboardTables(leaderboardRecords));
 
+        if (_winText != null)
+            _winText.text = WinTitlePlain;
         if (winTextRoot != null)
             winTextRoot.gameObject.SetActive(true);
+        SetFinalCelebrationVisible(true);
 
         // Once the leaderboard tables hide, all that's left on screen is
-        // the plain "ВЫ ПРОШЛИ ДО КОНЦА" title — a good, symbolic ending
-        // beat on its own, held deliberately instead of flashing by for a
-        // single frame before the reload. Always plays in full, even if
-        // the rest of the recap was skipped — it's the actual ending, not
-        // another page to sit through.
+        // the win title (with congratulations on this final beat only) —
+        // held for finalTitleHoldDuration, then confetti/firework play three
+        // full cycles and hide (text stays), then a short pause before reload.
         yield return new WaitForSeconds(finalTitleHoldDuration);
+
+        if (_winCelebration != null)
+            yield return _winCelebration.WaitForCyclesComplete();
+
+        SetFinalCelebrationFxVisible(false);
+        yield return new WaitForSecondsRealtime(FinalCelebrationPostFxPause);
 
         // Drop any win-boost / pause leftovers before the reload — otherwise
         // a stale CurrentSpeed or _winBoost can survive into the next run if
@@ -418,6 +470,72 @@ public class WinSequence : MonoBehaviour
         // the first "Main" in Build Settings (Sisyphus) and launches the wrong game.
         // buildIndex is collision-proof both standalone and in-hub.
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    private void HideGameplayHudPanels()
+    {
+        GameplayHudVisibility.SetWedgePanelsVisible(false);
+        GameplayHudVisibility.SetTricksHudVisible(false);
+    }
+
+    private void SetFinalCelebrationVisible(bool visible)
+    {
+        SetFinalCelebrationTextVisible(visible);
+        SetFinalCelebrationFxVisible(visible);
+    }
+
+    private void SetFinalCelebrationTextVisible(bool visible)
+    {
+        if (_winCongratsText != null)
+        {
+            _winCongratsText.text = WinCongratsPlain;
+            _winCongratsText.gameObject.SetActive(visible);
+        }
+        else if (winCongratsTextRoot != null)
+            winCongratsTextRoot.gameObject.SetActive(visible);
+    }
+
+    private void SetFinalCelebrationFxVisible(bool visible)
+    {
+        if (_winCelebration != null)
+            _winCelebration.SetPlaying(visible);
+    }
+
+    void EnsureWinCongratsText(Canvas canvas)
+    {
+        if (winCongratsTextRoot != null)
+        {
+            _winCongratsText = winCongratsTextRoot.GetComponent<Text>();
+            if (_winCongratsText != null)
+                return;
+        }
+
+        Font font = _winText != null ? _winText.font : null;
+        var go = new GameObject("WinCongratsText");
+        go.transform.SetParent(canvas.transform, false);
+
+        var rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0f, -60f);
+        rt.sizeDelta = new Vector2(1300f, 180f);
+
+        var text = go.AddComponent<Text>();
+        text.font = font;
+        text.fontSize = 110;
+        text.fontStyle = FontStyle.Bold;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = new Color(1f, 0.85f, 0.15f);
+        text.text = WinCongratsPlain;
+
+        var outline = go.AddComponent<Outline>();
+        outline.effectColor = Color.black;
+        outline.effectDistance = new Vector2(3f, -3f);
+
+        winCongratsTextRoot = rt;
+        _winCongratsText = text;
+        go.SetActive(false);
     }
 
     // Post-win summary, split across a few pages (same "read at your own
@@ -613,11 +731,18 @@ public class WinSequence : MonoBehaviour
             statsTotalText.gameObject.SetActive(false);
     }
 
-    // The real per-category top-3 tables (photo slots included), one at a
-    // time — shown once, right after the photo, before returning to the
-    // start screen (which has its own copy of these same tables).
-    private IEnumerator ShowLeaderboardTables()
+    // The real per-category top-3 tables (photo slots included) — only for
+    // categories this run newly qualified for (see ReportRun). If the run
+    // didn't enter any top-10 board, nothing is shown here.
+    private IEnumerator ShowLeaderboardTables(List<HighScoreManager.NewRecord> qualifyingRecords)
     {
+        if (leaderboardPages == null || qualifyingRecords == null || qualifyingRecords.Count == 0)
+            yield break;
+
+        var categories = new HashSet<int>();
+        foreach (var record in qualifyingRecords)
+            categories.Add(record.CategoryIndex);
+
         if (leaderboardRoot != null)
             leaderboardRoot.SetActive(true);
 
@@ -626,6 +751,10 @@ public class WinSequence : MonoBehaviour
             foreach (var page in leaderboardPages)
             {
                 if (page == null)
+                    continue;
+
+                var topPage = page.GetComponent<TopResultsPage>();
+                if (topPage != null && !categories.Contains(topPage.Category))
                     continue;
 
                 page.SetActive(true);

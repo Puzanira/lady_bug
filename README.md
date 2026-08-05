@@ -1,7 +1,18 @@
 # LadyBugHitTheRoad
 
 Локальный кооперативный (1–2 игрока) endless-runner про божью коровку на
-трёхполосной дороге.
+дороге; число полос выбирается в меню (1–7, по умолчанию 3).
+
+Это **игра 1 из 7** в мега-проекте аркадного автомата — остальные 6 слотов
+пока пустые заглушки (см. раздел 3.0 в `docs/technical-details.md`). Отсюда
+раскладка ассетов по папке на игру: `Assets/LadyBug/Scripts/lady_bug/`,
+`Assets/LadyBug/Sprites/lady_bug/` и т.д.
+
+## Лицензия
+Код (`Assets/LadyBug/Scripts`, `Assets/LadyBug/Editor`, `Assets/LadyBug/Shaders`, `ArduinoFirmware`) —
+**MIT**. Арт, звук и документация — **CC BY-NC 4.0**. Сторонние материалы
+(mixkit, OpenGameArt, шрифт ComicCAT) — под своими лицензиями.
+Подробности: [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Требования
 - Unity **6000.5.3f1**.
@@ -26,18 +37,22 @@
 
 ## Документация
 - [docs/technical-details.md](docs/technical-details.md) — технические детали для
-  ИИ-агентов: **как подключиться к проекту агентом** (MCP и запасной вариант
-  через файловую систему), как устроена разработка (инструменты, ограничения,
-  почему сцена собирается кодом через `Tools → Rebuild Scene`, а не руками),
-  и как устроена сама игра (механики, архитектура, файл за файлом).
-- [docs/game-brief.md](docs/game-brief.md) — бриф/анкета курса по игре.
+  ИИ-агентов: подключение к проекту, разработка (`Tools → Rebuild Scene`),
+  механики, архитектура кода.
+- [docs/game-brief.md](docs/game-brief.md) — бриф/анкета по игре.
+- [docs/hardware-wiring.md](docs/hardware-wiring.md) — разводка Arduino,
+  прошивки, Serial-протокол, меню и отладка железа.
 
 ## Структура
 - `UnityProject/` — чистый Unity-проект, открывать через Unity Hub именно эту
-  папку (скрипты в `UnityProject/Assets/LadyBug/Scripts`, генератор сцены в
-  `UnityProject/Assets/LadyBug/Editor/SceneSetup.cs`).
+  папку. Весь игровой контент лежит под `Assets/LadyBug/` (рантайм-код в
+  `Assets/LadyBug/Scripts/lady_bug/`, экран автомата в
+  `Assets/LadyBug/Scripts/loader/`, генератор сцены в
+  `Assets/LadyBug/Editor/SceneSetup.cs`).
+- `ArduinoFirmware/` — прошивки CombinedBoard / GestureSensors / Joystick /
+  SingleSensorTest.
 - `RawAssets/` — сырые исходники арта (кадры из `.swf`, скачанные картинки) до
-  конвертации в спрайты в `UnityProject/Assets/LadyBug/Sprites`.
+  конвертации в спрайты в `UnityProject/Assets/LadyBug/Sprites/lady_bug/`.
 - `docs/` — вся документация проекта.
 
 ## Быстрый старт
@@ -46,3 +61,7 @@ Rebuild Scene** — соберёт `Assets/LadyBug/Scenes/Main.unity` с нул�
 не хранится вручную). После изменений в `SceneSetup.cs` — повторить Rebuild
 Scene; после изменений только в `Assets/LadyBug/Scripts/*.cs` — Unity подхватывает
 сама, пересборка сцены не нужна.
+
+**Цель забега:** **10 км** (`WinSequence.WinSegmentDistanceKm`) — столько же
+добавляет каждое «продолжение» после финиша. Для отладки кат-сцены победы
+ставится 1.

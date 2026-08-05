@@ -5,9 +5,10 @@ using UnityEngine.UI;
 namespace LadyBug
 {
 
-// Pre-game menu: pick 1 or 2 players and confirm with Space/Enter — a
-// neutral key, not tied to either player's own scheme, since nothing is
-// bound to a specific player yet at this point.
+// Pre-game menu: pick 1 or 2 players, lane count, then confirm
+// СТАРТ/ТРЕНИРОВКА with a 5-second hold-down. Help text and the
+// bottom-right status line follow auto-detected hardware (gesture board /
+// joystick) after a short probe window.
 public class StartScreenController : MonoBehaviour
 {
     [SerializeField] private GameObject canvasRoot;
@@ -21,12 +22,31 @@ public class StartScreenController : MonoBehaviour
     [SerializeField] private Outline optionsRowOutline;
     [SerializeField] private Image optionsRowBg;
 
+    [SerializeField] private Image[] laneOptionBgs;
+    [SerializeField] private Text[] laneOptionTexts;
+    [SerializeField] private Outline lanesRowOutline;
+    [SerializeField] private Image lanesRowBg;
+
+    // Legacy serialized refs from an old controller-selection row — hidden
+    // at runtime; kept so existing scenes deserialize until the next rebuild.
     [SerializeField] private Image controller1Bg;
     [SerializeField] private Image controller2Bg;
     [SerializeField] private Text controller1Text;
     [SerializeField] private Text controller2Text;
     [SerializeField] private Outline controllerRowOutline;
     [SerializeField] private Image controllerRowBg;
+
+    [SerializeField] private Text controllerStatusText;
+    [SerializeField] private Text menuHelpText;
+
+    // The two per-player rows on the ВЫБОР В МЕНЮ carousel page. Baked with
+    // the keyboard mapping by SceneSetup (that page is built long before any
+    // board is polled) and rewritten here once a controller is detected —
+    // otherwise the upfront instructions tell a player sitting at the real
+    // cabinet to press keys that are not in front of them.
+    [SerializeField] private Text menuSelectionPlayer1Row;
+    [SerializeField] private Text menuSelectionPlayer2Row;
+    [SerializeField] private Text menuConfirmCountdownText;
 
     [SerializeField] private Image startBg;
     [SerializeField] private Text startText;
@@ -44,20 +64,17 @@ public class StartScreenController : MonoBehaviour
     [SerializeField] private Text trainingExitCountdownText;
     // Same 2-phase feel as DuckToExitController's own real-game exit —
     // first TrainingExitSilentPhase seconds show nothing at all, then a
-    // visible 5,4,3,2,1 countdown for TrainingExitCountdownPhase more,
-    // per feedback (was one flat 5s hold with the countdown visible the
-    // whole time).
-    private const float TrainingExitSilentPhase = 5f;
+    // visible 5,4,3,2,1 countdown for TrainingExitCountdownPhase more.
+    private const float TrainingExitSilentPhase = 3f;
     private const float TrainingExitCountdownPhase = 5f;
     private float _trainingHoldTimer;
 
-    // ТРЕНИРОВКА now leads here first — the same trick-instruction pages
+    // ТРЕНИРОВКА is this carousel only — the same trick-instruction pages
     // that used to be part of the general upfront carousel (everyone saw
     // them whether they cared or not), moved so only someone who actually
-    // picked training sees them. Confirm (same key as the main menu) moves
-    // on into the live practice screen above; holding down does the same
-    // 2-phase exit the live screen itself uses, but takes you all the way
-    // back to the main menu instead.
+    // picked training sees them. Flapping must not advance anywhere (it's
+    // what you're practicing); exit is hold-down 3 s silent + 5 s countdown
+    // back to the main menu.
     [SerializeField] private GameObject trickCarouselCanvasRoot;
     [SerializeField] private GameObject[] trickCarouselPages;
     [SerializeField] private GameObject trickCarouselBackground;
@@ -97,6 +114,7 @@ public class StartScreenController : MonoBehaviour
     [SerializeField] private GameObject gestureCanvasLeft;
 
     [SerializeField] private AudioSource musicSource;
+    [SerializeField] private MenuMusicRotator menuMusic;
     [SerializeField] private float musicFadeOutDuration = 2.5f;
 
     private static readonly Color SelectedColor = new Color(0.2f, 0.75f, 0.25f, 0.9f);
@@ -113,84 +131,116 @@ public class StartScreenController : MonoBehaviour
     private static readonly Color RowFocusColor = new Color(1f, 0.85f, 0.15f, 0.22f);
     private static readonly Color RowIdleColor = new Color(1f, 1f, 1f, 0.05f);
 
-    // Set false in production cabinet builds — hides the whole keyboard/sensors
-    // row and forces real distance sensors (see SceneSetup.ShowControllerSelectionRow).
-    private const bool ShowControllerSelectionRow = true;
-    private int RowCount => ShowControllerSelectionRow ? 3 : 2; // 0 = players, 1 = controller (optional), last = start
-    private const int ControllerCount = 2; // 0 = keyboard, 1 = distance sensors
+    private static readonly Color DisabledColor = new Color(0.1f, 0.1f, 0.1f, 0.55f);
+    private static readonly Color DisabledTextColor = new Color(0.45f, 0.45f, 0.45f);
+
+    private const int RowCount = 3; // 0 = players, 1 = lanes, 2 = start
+    private const int PlayersRowIndex = 0;
+    private const int LanesRowIndex = 1;
+    private const int StartRowIndex = 2;
+    private const int LaneOptionCount = RoadLayout.MaxLaneCount;
 
     private int _selectedPlayers = 2;
-    private int _selectedController; // 0 = keyboard, 1 = distance sensors
+    private int _selectedLanes; // 0-based index → lane count = index + 1
     private int _selectedStartOption; // 0 = СТАРТ, 1 = ТРЕНИРОВКА
     private int _row;
+    private bool _useHardwareInput;
+    private float _controllerPollTimer;
+    private float _controllerDetectElapsed;
+    private bool _controllerDetectionSettled;
+    private const float ControllerDetectDuration = 4f;
+    private const string ControllerDetectBase = "КОНТРОЛЛЕР";
+    private const int ControllerDetectDotMin = 3;
+    private const int ControllerDetectDotMax = 20;
+    private const float ControllerDetectDotInterval = 0.45f;
+    private int _controllerDetectDotCount = ControllerDetectDotMin;
+    private float _controllerDetectDotTimer;
+    private int _appliedPreviewLaneCount;
+    private int _appliedPreviewPlayers;
+    private bool _roadPreviewApplied;
 
-    private int StartRowIndex => ShowControllerSelectionRow ? 2 : 1;
-
-    // TEMPORARY, for faster debug/test cycling — revert to 10f for real play.
+    // Joystick/menu: short up = row up; on upper rows down moves immediately;
+    // on the start row hold down 5s = confirm.
+    private const float MenuConfirmHold = 5f;
+    private const float MenuJoystickUpTapMax = 0.35f;
     // Floor for every page's dwell time — animated pages (arch/ring trick,
     // gesture diagrams) can ask for longer via GetPageDwellDuration so a
     // slower carousel here doesn't also stretch their fixed-length loops
     // out further than they already run.
-    private const float CarouselInterval = 4f;
-    // Pure pause before the carousel shows anything at all — first
-    // impression is the game running behind the menu buttons, not a table,
-    // same as before the carousel/winner-tables existed.
-    private const float CarouselStartDelay = 4f;
     private const int NoCarouselPage = -2; // sentinel distinct from _lastCarouselPage's initial -1
+
+    private const string MenuHelpStartBlock =
+        "\n\nНАЧАЛО:\n"
+        + "ВЫБРАТЬ СТАРТ ИЛИ ТРЕНИРОВКА\n"
+        + "И ДЕРЖАТЬ ВНИЗ 5 СЕК";
+
+    private const string MenuHelpHardware =
+        "ВЫБОР:\n"
+        + "ВВЕРХ · ВНИЗ · ВЛЕВО · ВПРАВО"
+        + MenuHelpStartBlock;
+
+    private const string MenuHelpKeyboard =
+        "ВЫБОР:\n"
+        + "WASD · IJKL"
+        + MenuHelpStartBlock;
+
+    // Rows on the ВЫБОР В МЕНЮ carousel page. Hardware wording matches the
+    // УПРАВЛЕНИЕ page built by SceneSetup (ИГРОК 1 — ДАТЧИКИ, ИГРОК 2 —
+    // ДЖОЙСТИК), so the two instruction screens agree with each other.
+    private const string MenuSelectionPlayer1Keyboard = "ИГРОК 1: WASD";
+    private const string MenuSelectionPlayer2Keyboard = "ИГРОК 2: IJKL";
+    private const string MenuSelectionPlayer1Hardware = "ИГРОК 1: ДАТЧИКИ РУК";
+    private const string MenuSelectionPlayer2Hardware = "ИГРОК 2: ДЖОЙСТИК";
+
     private int _lastCarouselPage = -1;
     private float _pageDwellElapsed;
 
     private PlayerController _rightController;
-    private int _rightHomeLane;
 
-    // Edge-detect state for the two menu-only gestures that GestureInput
-    // doesn't already expose as a "just happened" signal (LeanLeft/RightDown
-    // and JumpDown already are — DuckHeld and "both hands up" are level
-    // signals there since ducking/jumping mid-run don't need edges).
-    private bool _prevBothUpRight, _prevBothUpLeft;
+    // Edge-detect state for menu-only gestures that GestureInput doesn't
+    // expose as a "just happened" signal (LeanLeft/RightDown already are).
     private bool _prevDuckRight, _prevDuckLeft;
 
-    // Arcade cabinet menu input: the cabinet joystick navigates this screen and the
-    // GREEN (or RED) action button confirms. Sampled once per Update into rising
-    // edges, since menu steps are discrete. No-op standalone — ArcadeControlsReader
-    // is inert when the arcade-controls package is absent — so keyboard/gesture nav
-    // is unchanged there.
-    private const float ArcadeMenuThreshold = 0.5f;
-    private bool _arcMenuLeft, _arcMenuRight, _arcMenuUp, _arcMenuDown, _arcMenuConfirm;
-    private bool _arcHeldLeft, _arcHeldRight, _arcHeldUp, _arcHeldDown, _arcHeldConfirm;
+    private float _menuDownHoldTimer;
+    private bool _menuDownConfirmTriggered;
+    private bool _prevMenuDownHeld;
+    private bool _menuHorizontalNavLocked;
+    private float _joystickUpHoldTimer;
+    private bool _joystickUpConfirmTriggered;
+    private bool _prevJoystickUpHeld;
 
-    private void SampleArcadeMenuInput()
-    {
-        Vector2 v = ArcadeControlsReader.Available ? ArcadeControlsReader.Joystick : Vector2.zero;
-        bool confirmHeld = ArcadeControlsReader.GreenHeld || ArcadeControlsReader.RedHeld;
+    // CombinedBoard menu nav — lean edges as fallback when GestureInput hasn't
+    // picked up yet (flap uses JumpDown via gestureLeft once enabled).
+    private bool _menuCombinedPrevLeanLeftHeld;
+    private bool _menuCombinedPrevLeanRightHeld;
+    private float _menuSuppressFlapUntil;
 
-        bool l = v.x < -ArcadeMenuThreshold;
-        bool r = v.x > ArcadeMenuThreshold;
-        bool u = v.y > ArcadeMenuThreshold;
-        bool d = v.y < -ArcadeMenuThreshold;
-
-        _arcMenuLeft = l && !_arcHeldLeft; _arcHeldLeft = l;
-        _arcMenuRight = r && !_arcHeldRight; _arcHeldRight = r;
-        _arcMenuUp = u && !_arcHeldUp; _arcHeldUp = u;
-        _arcMenuDown = d && !_arcHeldDown; _arcHeldDown = d;
-        _arcMenuConfirm = confirmHeld && !_arcHeldConfirm; _arcHeldConfirm = confirmHeld;
-    }
-
-    // In the cabinet the sensible defaults are not the author's dev defaults: the
-    // station is ONE player (a single HeightA/HeightB pair on one combo board — the
-    // firmware even sends "-1,-1,0" for a second player), and the control that
-    // actually steers the ladybug is those two height sensors, i.e. ДАТЧИКИ. Preselect
-    // both so a player who just walks up and presses GREEN gets a run driven by the
-    // real cabinet hands, instead of a 2-player keyboard game nobody can play.
-    // Both rows stay selectable exactly as before; standalone nothing changes.
+    // In the cabinet the sensible default is not the author's dev default: the
+    // station is ONE player, with a single HeightA/HeightB sensor pair on one combo
+    // board. Preselect 1 player so someone who just walks up and holds the stick
+    // down gets a playable run, instead of a 2-player game with a dead second slot.
+    //
+    // Nothing else needs forcing here anymore: since the author replaced the manual
+    // КЛАВИАТУРА/ДАТЧИКИ row with auto-detection (IsHardwareConnected), the cabinet
+    // selects hardware input by itself — both serial readers report IsConnected off
+    // the ArcadeInput facade (see their UseArcadeFacade seams), so the stick and the
+    // hand sensors drive this menu through the author's own joystick/gesture paths.
+    // Standalone, where the facade is absent, this is a no-op.
     private void ApplyArcadeDefaults()
     {
         if (!ArcadeControlsReader.Available)
             return;
 
         _selectedPlayers = 1;
-        _selectedController = 1; // ДАТЧИКИ — reads the cabinet's HeightA/HeightB
     }
+
+    // The cabinet's action buttons confirm. The menu's confirm gesture is
+    // "hold DOWN" (instant row-advance on the upper rows, 5-second hold on the
+    // start row — see UpdateMenuDownHold), so the buttons feed that same channel:
+    // tap to walk down the rows, hold on СТАРТ/ТРЕНИРОВКА to commit. Inert
+    // standalone.
+    private static bool ArcadeConfirmHeld()
+        => ArcadeControlsReader.GreenHeld || ArcadeControlsReader.RedHeld;
 
     private void Awake()
     {
@@ -202,25 +252,30 @@ public class StartScreenController : MonoBehaviour
         SetPlayerControlEnabled(playerLeft, false);
 
         if (playerRight != null)
-        {
             _rightController = playerRight.GetComponent<PlayerController>();
-            if (_rightController != null)
-                _rightHomeLane = _rightController.HomeLane;
-        }
 
-        // The per-player gesture HUD is feedback for actual play, not menu
-        // chrome — hidden while this menu is up (MenuHelpText covers the
-        // freed-up space instead), shown again once BeginGame fires.
-        if (gestureCanvasRight != null)
-            gestureCanvasRight.SetActive(false);
-        if (gestureCanvasLeft != null)
-            gestureCanvasLeft.SetActive(false);
+        // Score/tricks HUD off on the menu; gesture debug readout stays on
+        // when hardware is connected so sensor mm/actions are visible while
+        // navigating the pre-game screen.
+        HideScoreHudShowGestureDebug();
 
+        HideLegacyControllerRow();
+        EnsureLaneRowUI();
+        EnsureControllerStatusText();
+        EnsureMenuHelpText();
+        EnsureMenuConfirmCountdownText();
+
+        if (_rightController != null)
+            _selectedLanes = Mathf.Clamp(_rightController.LaneCount - 1, 0, LaneOptionCount - 1);
+        if (_selectedPlayers == 2 && _selectedLanes == 0)
+            _selectedLanes = 1;
+
+        _controllerDetectElapsed = 0f;
+        _controllerDetectionSettled = false;
+        _controllerDetectDotCount = ControllerDetectDotMin;
+        _controllerDetectDotTimer = 0f;
+        RefreshControllerDetection();
         RestoreMenuGestureMode();
-
-        if (!ShowControllerSelectionRow)
-            _selectedController = 1;
-
         UpdateVisuals();
         UpdateCarousel();
 
@@ -238,13 +293,15 @@ public class StartScreenController : MonoBehaviour
     // above for why it doesn't just start here.
     public void PlayMusic()
     {
-        if (musicSource != null)
+        if (menuMusic != null)
+            menuMusic.Play();
+        else if (musicSource != null)
             musicSource.Play();
     }
 
     // Also called by IntroSequence.Finish(), for every one of the loader's
     // 7 game slots (not just БК's own PlayMusic) — the carousel's own
-    // CarouselStartDelay/dwell timing runs on Time.time from scene load,
+    // PreGameScreenTiming.PageDwellSeconds pause/dwell timing runs on Time.time from scene load,
     // but this menu can sit hidden behind the loader + a full intro
     // sequence (~15-20s) before a player ever actually sees it. Without
     // this reset, the carousel silently cycles the whole time it's hidden,
@@ -269,11 +326,6 @@ public class StartScreenController : MonoBehaviour
 
     private void Update()
     {
-        // Before the screen branches: the trick carousel needs the cabinet confirm
-        // too, and the edge detection has to see EVERY frame or a press made on one
-        // screen leaks as a stale edge onto the next.
-        SampleArcadeMenuInput();
-
         if (trickCarouselCanvasRoot != null && trickCarouselCanvasRoot.activeSelf)
         {
             UpdateTrickCarousel();
@@ -288,62 +340,83 @@ public class StartScreenController : MonoBehaviour
 
         UpdateCarousel();
 
-        bool left = Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A) || _arcMenuLeft;
-        bool right = Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D) || _arcMenuRight;
-        bool up = Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W) || _arcMenuUp;
-        bool down = Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S) || _arcMenuDown;
-        // Confirm on the cabinet's GREEN action button (or RED), OR the usual keyboard
-        // keys — so the whole start flow is reachable with the cabinet controls.
-        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || _arcMenuConfirm;
+        if (!_controllerDetectionSettled)
+        {
+            _controllerDetectElapsed += Time.deltaTime;
+            if (_controllerDetectElapsed >= ControllerDetectDuration)
+            {
+                _controllerDetectionSettled = true;
+                RefreshControllerDetection();
+            }
+            else if (!_useHardwareInput)
+            {
+                _controllerDetectDotTimer += Time.deltaTime;
+                if (_controllerDetectDotTimer >= ControllerDetectDotInterval)
+                {
+                    _controllerDetectDotTimer = 0f;
+                    _controllerDetectDotCount++;
+                    if (_controllerDetectDotCount > ControllerDetectDotMax)
+                        _controllerDetectDotCount = ControllerDetectDotMin;
+                    UpdateControllerStatusText();
+                }
+            }
+        }
 
-        // Gesture nav (works from either player, whichever the keyboard
-        // simulator or real sensors are hooked up to): leaning one hand
-        // moves left/right, both hands up moves the row cursor up, both
-        // hands down (duck) moves it down, and flapping (the same signal
-        // that means "jump" in actual play) confirms — "start and wave"
-        // rather than a dedicated new gesture.
+        _controllerPollTimer += Time.deltaTime;
+        if (_controllerPollTimer >= 0.5f)
+        {
+            _controllerPollTimer = 0f;
+            RefreshControllerDetection();
+        }
+
+        // Must precede every MenuSensor*Held read this frame — see its own comment.
+        UpdateMenuSensorFlapState();
+
+        bool left = Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.J);
+        bool right = Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.L);
+        bool up = Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.I);
+        bool down = false; // S/K handled by UpdateMenuDownHold — edge on release only, not press
+
+        // Gesture nav: lean L/R, flap up (not "hands held up"), duck down.
         left |= IsLeanLeftDown(gestureRight) || IsLeanLeftDown(gestureLeft);
         right |= IsLeanRightDown(gestureRight) || IsLeanRightDown(gestureLeft);
-        up |= EdgeBothHandsUp(gestureRight, ref _prevBothUpRight) || EdgeBothHandsUp(gestureLeft, ref _prevBothUpLeft);
-        down |= EdgeDuck(gestureRight, ref _prevDuckRight) || EdgeDuck(gestureLeft, ref _prevDuckLeft);
-        confirm |= IsJumpDown(gestureRight) || IsJumpDown(gestureLeft);
+        up |= IsFlapDown(gestureRight) || IsFlapDown(gestureLeft);
+        AppendMenuCombinedBoardNav(ref left, ref right, ref up);
+        AppendMenuJoystickNav(ref left, ref right);
+        ApplyMenuHorizontalNavLock(ref left, ref right);
+        UpdateMenuJoystickUp(ref up);
+        UpdateMenuDownHold(ref down);
+
+        if (MenuSensorDuckHeld() || Time.time < _menuSuppressFlapUntil)
+            up = false;
 
         if (left || right)
         {
-            if (_row == 0)
+            if (_row == PlayersRowIndex)
             {
                 _selectedPlayers = _selectedPlayers == 1 ? 2 : 1;
+                if (_selectedPlayers == 2 && _selectedLanes == 0)
+                    _selectedLanes = 1;
+                RestoreMenuGestureMode();
             }
-            else if (_row == 1 && ShowControllerSelectionRow)
+            else if (_row == LanesRowIndex)
             {
                 int delta = right ? 1 : -1;
-                _selectedController = (_selectedController + delta + ControllerCount) % ControllerCount;
+                int minLane = MinSelectableLaneIndex();
+                _selectedLanes = Mathf.Clamp(_selectedLanes + delta, minLane, LaneOptionCount - 1);
             }
             else if (_row == StartRowIndex)
             {
                 _selectedStartOption = _selectedStartOption == 0 ? 1 : 0;
             }
+
             UpdateVisuals();
         }
 
-        if (up)
-        {
-            _row = (_row - 1 + RowCount) % RowCount;
-            UpdateVisuals();
-        }
-        else if (down)
-        {
-            _row = (_row + 1) % RowCount;
-            UpdateVisuals();
-        }
-
-        if (confirm && _row == StartRowIndex)
-        {
-            if (_selectedStartOption == 0)
-                BeginGame();
-            else
-                BeginTraining();
-        }
+        if (down)
+            MoveRow(1);
+        else if (up)
+            MoveRow(-1);
     }
 
     // Duck-held (real gesture or the same Down/S keys the menu itself
@@ -354,8 +427,7 @@ public class StartScreenController : MonoBehaviour
     // down all the way just takes you straight back to the menu.
     private void UpdateTrainingScreen()
     {
-        bool holding = Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.S)
-            || IsDuckHeld(gestureRight) || IsDuckHeld(gestureLeft) || IsDuckHeld(joystickRight) || IsDuckHeld(joystickLeft);
+        bool holding = AreAllActivePlayersHoldingTrainingExit();
 
         if (!holding)
         {
@@ -391,6 +463,8 @@ public class StartScreenController : MonoBehaviour
 
     private void BeginTraining()
     {
+        HideScoreHudShowGestureDebug();
+
         // Not canvasRoot.SetActive(false) — this whole script lives on
         // canvasRoot itself (see SceneSetup.CreateStartScreen), so that
         // would disable this component along with it, and Update (which is
@@ -402,43 +476,8 @@ public class StartScreenController : MonoBehaviour
         if (startCanvas != null)
             startCanvas.enabled = false;
 
-        // Same input-scheme choice a real run applies (see BeginGame) —
-        // without this, the live "ВАШИ ДЕЙСТВИЯ" bugs on the trick carousel
-        // just keep reading whatever GestureInput/JoystickInput were left
-        // at by default (disabled) instead of whatever was actually picked
-        // on this same menu, and never react to anything. No hardware-
-        // connection check here, unlike BeginGame — a practice screen
-        // shouldn't refuse entry just because a board isn't plugged in yet.
-        bool gestureActive = _selectedController == 1;
-        bool useRealSensors = _selectedController == 1;
-        if (_selectedController == 1)
-        {
-            // Player 1 (left) always reads real hand sensors in sensor mode,
-            // including solo play — see joystickRight for player 2's side.
-            SetGestureEnabled(gestureLeft, true, true);
-            SetJoystickEnabled(joystickLeft, false);
-        }
-        else
-        {
-            SetGestureEnabled(gestureLeft, false, false);
-            SetJoystickEnabled(joystickLeft, false);
-        }
-
-        if (_selectedController == 1 && _selectedPlayers == 2)
-        {
-            // "Датчики" for player 2 means their own joystick board, not a
-            // second pair of hand sensors — see joystickRight's comment.
-            // Only in 2-player mode: solo play has no partner to hand the
-            // sensors to, so it keeps using them itself (same as before the
-            // left/right swap) instead of switching to an unplugged joystick.
-            SetGestureEnabled(gestureRight, false, false);
-            SetJoystickEnabled(joystickRight, true);
-        }
-        else
-        {
-            SetGestureEnabled(gestureRight, gestureActive, useRealSensors);
-            SetJoystickEnabled(joystickRight, false);
-        }
+        ApplyInputScheme();
+        ApplyTrainingVisuals();
 
         // Trick-instruction carousel first, not the live screen directly —
         // see trickCarouselCanvasRoot's own comment.
@@ -449,24 +488,14 @@ public class StartScreenController : MonoBehaviour
         _trickExitHoldTimer = 0f;
     }
 
-    // Confirm, from the trick carousel, moves on into the actual live
-    // practice screen — holding down instead (same gesture the live screen
-    // itself uses to exit) backs all the way out to the main menu, see
-    // ExitTrickCarouselToMenu.
+    // Hold-down exit backs all the way out to the main menu — see
+    // ExitTrickCarouselToMenu. No confirm/advance gesture here: training IS
+    // this carousel (flap practice must not trigger a screen change).
     private void UpdateTrickCarousel()
     {
         UpdateCarouselGeneric(trickCarouselPages, trickCarouselBackground, ref _lastTrickPage, ref _trickPageDwellElapsed);
 
-        bool confirm = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || _arcMenuConfirm;
-        confirm |= IsJumpDown(gestureRight) || IsJumpDown(gestureLeft);
-        if (confirm)
-        {
-            EnterLiveTraining();
-            return;
-        }
-
-        bool holding = Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.S)
-            || IsDuckHeld(gestureRight) || IsDuckHeld(gestureLeft) || IsDuckHeld(joystickRight) || IsDuckHeld(joystickLeft);
+        bool holding = AreAllActivePlayersHoldingTrainingExit();
 
         // Same 2-phase feel as the live screen's own UpdateTrainingScreen —
         // silent first, then a visible countdown — per feedback there was
@@ -505,23 +534,17 @@ public class StartScreenController : MonoBehaviour
         }
     }
 
-    private void EnterLiveTraining()
-    {
-        if (trickCarouselCanvasRoot != null)
-            trickCarouselCanvasRoot.SetActive(false);
-        if (trainingCanvasRoot != null)
-            trainingCanvasRoot.SetActive(true);
-        _trainingHoldTimer = 0f;
-    }
-
     private void ExitTrickCarouselToMenu()
     {
         if (trickCarouselCanvasRoot != null)
             trickCarouselCanvasRoot.SetActive(false);
         RestoreMenuGestureMode();
+        UpdateMenuGestureDebugHud();
+        ResetMenuHorizontalNavLock();
         Canvas startCanvas = canvasRoot != null ? canvasRoot.GetComponent<Canvas>() : null;
         if (startCanvas != null)
             startCanvas.enabled = true;
+        UpdateVisuals();
     }
 
     private void ExitTraining()
@@ -531,33 +554,30 @@ public class StartScreenController : MonoBehaviour
         if (trainingExitCountdownText != null)
             trainingExitCountdownText.gameObject.SetActive(false);
         RestoreMenuGestureMode();
+        UpdateMenuGestureDebugHud();
+        ResetMenuHorizontalNavLock();
         Canvas startCanvas = canvasRoot != null ? canvasRoot.GetComponent<Canvas>() : null;
         if (startCanvas != null)
             startCanvas.enabled = true;
+        UpdateVisuals();
     }
 
     private void UpdateVisuals()
     {
         bool oneSelected = _selectedPlayers == 1;
 
-        // Live preview: the second ladybug appears/disappears on the road
-        // the instant the selection changes, before Start is even pressed.
+        // P1 = light ladybug on the left (sensors); P2 = dark on the right
+        // (joystick). In 1-player mode only P1 is on the road.
         if (playerLeft != null)
-            playerLeft.SetActive(!oneSelected);
-        // Same choice governs every gesture/trick page's own live preview —
-        // the player-1 bug always shows, the player-2 one on each page
-        // follows 1-player/2-player just like the real playerLeft above.
-        if (trainingPreviewLeftBugs != null)
-        {
-            foreach (var bug in trainingPreviewLeftBugs)
-                if (bug != null)
-                    bug.SetActive(!oneSelected);
-        }
+            playerLeft.SetActive(true);
+        if (playerRight != null)
+            playerRight.SetActive(!oneSelected);
 
-        // Solo mode stands the lone player in the middle lane instead of
-        // its usual (right-edge) co-op starting lane.
-        if (_rightController != null)
-            _rightController.SetPreviewLane(oneSelected ? _rightController.LaneCount / 2 : _rightHomeLane);
+        UpdateTrainingPreviewBugs(!oneSelected);
+        UpdateTrainingLiveBugLooks(!oneSelected);
+        ApplyPlayerBugVisuals();
+
+        ApplyRoadPreview();
 
         if (option1Bg != null)
             option1Bg.color = oneSelected ? SelectedColor : UnselectedColor;
@@ -568,25 +588,17 @@ public class StartScreenController : MonoBehaviour
         if (option2Text != null)
             option2Text.text = (oneSelected ? "[ ] " : "[X] ") + "2 ИГРОКА";
 
-        bool keyboardSelected = _selectedController == 0;
-        bool sensorsSelected = _selectedController == 1;
-        if (controller1Bg != null)
-            controller1Bg.color = keyboardSelected ? SelectedColor : UnselectedColor;
-        if (controller2Bg != null)
-            controller2Bg.color = sensorsSelected ? SelectedColor : UnselectedColor;
-        if (controller1Text != null)
-            controller1Text.text = (keyboardSelected ? "[X] " : "[ ] ") + "КЛАВИАТУРА";
-        if (controller2Text != null)
-            controller2Text.text = (sensorsSelected ? "[X] " : "[ ] ") + "ДАТЧИКИ";
+        UpdateLaneOptionVisuals();
 
         if (optionsRowOutline != null)
-            optionsRowOutline.effectColor = _row == 0 ? FocusOutline : IdleOutline;
+            optionsRowOutline.effectColor = _row == PlayersRowIndex ? FocusOutline : IdleOutline;
         if (optionsRowBg != null)
-            optionsRowBg.color = _row == 0 ? RowFocusColor : RowIdleColor;
-        if (controllerRowOutline != null)
-            controllerRowOutline.effectColor = ShowControllerSelectionRow && _row == 1 ? FocusOutline : IdleOutline;
-        if (controllerRowBg != null)
-            controllerRowBg.color = ShowControllerSelectionRow && _row == 1 ? RowFocusColor : RowIdleColor;
+            optionsRowBg.color = _row == PlayersRowIndex ? RowFocusColor : RowIdleColor;
+
+        if (lanesRowOutline != null)
+            lanesRowOutline.effectColor = _row == LanesRowIndex ? FocusOutline : IdleOutline;
+        if (lanesRowBg != null)
+            lanesRowBg.color = _row == LanesRowIndex ? RowFocusColor : RowIdleColor;
         if (startOutline != null)
             startOutline.effectColor = _row == StartRowIndex ? FocusOutline : IdleOutline;
         if (startRowBg != null)
@@ -608,99 +620,124 @@ public class StartScreenController : MonoBehaviour
             notImplementedText.gameObject.SetActive(false);
     }
 
+    // P1 = light left (sensors); P2 = dark right (joystick). Same assignment
+    // as the menu and gameplay — hide P2's road bug and carousel LiveBug when
+    // only one player is selected.
+    private void ApplyTrainingVisuals()
+    {
+        bool twoPlayers = _selectedPlayers == 2;
+        if (playerLeft != null)
+            playerLeft.SetActive(true);
+        if (playerRight != null)
+            playerRight.SetActive(twoPlayers);
+        UpdateTrainingPreviewBugs(twoPlayers);
+        UpdateTrainingLiveBugLooks(twoPlayers);
+        ApplyPlayerBugVisuals();
+        UpdateMenuGestureDebugHud();
+    }
+
+    private void ApplyPlayerBugVisuals()
+    {
+        PlayerBugVisuals.ApplyForPlayerCount(_selectedPlayers, playerLeft, playerRight);
+    }
+
+    private static void ApplyLiveBugPreviewLook(GameObject bug, string baseName, Color tint)
+    {
+        if (bug == null)
+            return;
+
+        if (!PlayerBugVisuals.TryGetBugTextures(baseName, out Texture2D normal, out Texture2D air1, out Texture2D air2))
+            return;
+
+        LiveBugReactionAnimator animator = bug.GetComponent<LiveBugReactionAnimator>();
+        if (animator != null)
+        {
+            animator.ApplyBugLook(normal, air1, air2, tint);
+            return;
+        }
+
+        RawImage image = bug.GetComponent<RawImage>();
+        if (image == null)
+            return;
+
+        if (normal != null)
+            image.texture = normal;
+        image.color = tint;
+    }
+
+    // Match road players: P1 always light Bug1; P2 (2P only) dark Bug2.
+    private void UpdateTrainingLiveBugLooks(bool twoPlayers)
+    {
+        if (trainingPreviewLeftBugs == null)
+            return;
+
+        foreach (GameObject p1Bug in trainingPreviewLeftBugs)
+        {
+            if (p1Bug == null)
+                continue;
+
+            ApplyLiveBugPreviewLook(p1Bug, "LadyBug1", Color.white);
+
+            if (!twoPlayers)
+                continue;
+
+            Transform column = p1Bug.transform.parent;
+            if (column == null)
+                continue;
+
+            for (int i = 0; i < column.childCount; i++)
+            {
+                Transform child = column.GetChild(i);
+                if (child.gameObject == p1Bug || child.name != "LiveBug")
+                    continue;
+
+                ApplyLiveBugPreviewLook(child.gameObject, "LadyBug2", PlayerBugVisuals.PlayerTwoDarkTint);
+            }
+        }
+    }
+
+    // trainingPreviewLeftBugs = P1 (light, sensors) previews; hide P2's dark
+    // LiveBug sibling on each training page when only one player is selected.
+    private void UpdateTrainingPreviewBugs(bool showPlayerTwo)
+    {
+        if (trainingPreviewLeftBugs == null)
+            return;
+
+        foreach (GameObject p1Bug in trainingPreviewLeftBugs)
+        {
+            if (p1Bug == null)
+                continue;
+
+            p1Bug.SetActive(true);
+
+            Transform column = p1Bug.transform.parent;
+            if (column == null)
+                continue;
+
+            for (int i = 0; i < column.childCount; i++)
+            {
+                Transform child = column.GetChild(i);
+                if (child.gameObject == p1Bug || child.name != "LiveBug")
+                    continue;
+                child.gameObject.SetActive(showPlayerTwo);
+            }
+        }
+    }
+
     private void BeginGame()
     {
-        if (_selectedController == 1)
-        {
-            bool sensorsConnected = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
-            // A combined board (ArduinoFirmware/CombinedBoard) identifies itself as
-            // a plain joystick and carries player 1's 2 sensors alongside it instead
-            // of a separate dedicated board (see JoystickSerial's own comment) —
-            // counts as "sensors connected" too, since there's no separate
-            // GestureSensorSerial connection to check in that setup. The arcade
-            // cabinet IS a combined board, and both readers report IsConnected there
-            // off ArcadeInput's heights/stick, so either half satisfies this.
-            bool combinedBoardConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
-            bool connected = sensorsConnected || combinedBoardConnected;
+        ApplyInputScheme();
+        ApplyPlayerBugVisuals();
+        RoadGeometryRuntime.Apply(EffectiveLaneCount(), _selectedPlayers);
+        _roadPreviewApplied = true;
+        _appliedPreviewLaneCount = EffectiveLaneCount();
+        _appliedPreviewPlayers = _selectedPlayers;
 
-            // Player 2's joystick: on a combined board it rides the same port as
-            // player 1's sensors, so it is there by definition — only the
-            // two-separate-boards setup can be missing it. Checked on its own so a
-            // missing joystick doesn't get misreported as the (already-connected)
-            // hand-sensor board being the problem.
-            bool joystickMissing = connected && _selectedPlayers == 2 && !combinedBoardConnected;
+        SetPlayerControlEnabled(playerLeft, true);
+        SetPlayerControlEnabled(playerRight, _selectedPlayers == 2);
 
-            if (!connected || joystickMissing)
-            {
-                // Arcade-cabinet fallback: with no board attached this used to
-                // dead-end on a "проверь подключение платы" message with no way
-                // forward at all, which blocked playing the game on any machine
-                // without the Arduino hardware — including a dev laptop running the
-                // arcade-hub. Instead of blocking, flip the selection to КЛАВИАТУРА
-                // (row 1, option 0) and say so; the next confirm plays on keyboard.
-                // ДАТЧИКИ still works exactly as before once a board IS connected —
-                // and in the cabinet it always is, because GestureSensorSerial
-                // reports IsConnected from ArcadeInput's height sensors there, so
-                // this branch simply never fires in the hub.
-                _selectedController = 0;
-                UpdateVisuals(); // reflect the switch (also clears any older message)
-                if (notImplementedText != null)
-                {
-                    notImplementedText.gameObject.SetActive(true);
-                    notImplementedText.text = joystickMissing
-                        ? "Джойстик игрока 2 не найден — переключено на клавиатуру"
-                        : "Плата не найдена — переключено на клавиатуру";
-                }
-                return;
-            }
-        }
-
-        bool gestureActive = _selectedController == 1;
-        bool useRealSensors = _selectedController == 1;
-
-        // playerLeft's active state already reflects the selection (toggled
-        // live in UpdateVisuals) — only need to arm its controls if present.
-        if (_selectedPlayers == 2)
-        {
-            SetPlayerControlEnabled(playerLeft, true);
-
-            if (_selectedController == 1)
-            {
-                // Real hardware: player 1 (left) reads distance sensors —
-                // see joystickRight's own comment for player 2's side.
-                SetGestureEnabled(gestureLeft, true, true);
-                SetJoystickEnabled(joystickLeft, false);
-            }
-            else
-            {
-                SetGestureEnabled(gestureLeft, gestureActive, useRealSensors);
-                SetJoystickEnabled(joystickLeft, false);
-            }
-        }
-
-        SetPlayerControlEnabled(playerRight, true);
-        if (_selectedController == 1 && _selectedPlayers == 2)
-        {
-            // "Датчики" for player 2 means their own joystick board, not a
-            // second pair of hand sensors — see joystickRight's comment.
-            // Only in 2-player mode: solo play has no partner to hand the
-            // sensors to, so it keeps using them itself (same as before the
-            // left/right swap) instead of switching to an unplugged joystick.
-            SetGestureEnabled(gestureRight, false, false);
-            SetJoystickEnabled(joystickRight, true);
-        }
-        else
-        {
-            SetGestureEnabled(gestureRight, gestureActive, useRealSensors);
-            SetJoystickEnabled(joystickRight, false);
-        }
-
-        // The gesture HUD was hidden for the menu (see Awake) — back on now
-        // that the run itself is starting.
-        if (gestureCanvasRight != null)
-            gestureCanvasRight.SetActive(true);
-        if (gestureCanvasLeft != null)
-            gestureCanvasLeft.SetActive(true);
+        // Gameplay HUD back on for the actual run.
+        GameplayHudVisibility.SetGameplayHudVisible(true);
 
         if (SpeedController.Instance != null)
             SpeedController.Instance.BeginGame();
@@ -728,6 +765,9 @@ public class StartScreenController : MonoBehaviour
 
     private IEnumerator FadeOutMusicThenHide(float duration)
     {
+        if (menuMusic != null)
+            menuMusic.StopRotating();
+
         if (musicSource != null)
         {
             float startVolume = musicSource.volume;
@@ -748,7 +788,7 @@ public class StartScreenController : MonoBehaviour
 
     // Cycles the middle info panel between pages (rules/controls/trick
     // diagrams/gesture diagrams), looping — driven by an elapsed-time
-    // counter per page rather than a fixed CarouselInterval for every page
+    // counter per page rather than a fixed PreGameScreenTiming.PageDwellSeconds for every page
     // (see GetPageDwellDuration), so an animated page's own loop doesn't
     // get cut off mid-cycle by a shorter global timer. Pages are whole
     // pre-built GameObjects (not just swapped text) so some can be visual
@@ -758,7 +798,7 @@ public class StartScreenController : MonoBehaviour
         if (carouselPages == null || carouselPages.Length == 0)
             return;
 
-        if (Time.time < CarouselStartDelay)
+        if (Time.time < PreGameScreenTiming.PageDwellSeconds)
         {
             if (_lastCarouselPage != NoCarouselPage)
             {
@@ -778,7 +818,7 @@ public class StartScreenController : MonoBehaviour
     // Shared by the main info carousel and the ТРЕНИРОВКА trick-instruction
     // carousel (UpdateTrickCarousel) — advances pages[lastPage] to the next
     // one once its own dwell duration elapses, looping forever. The main
-    // carousel's CarouselStartDelay pause is handled by its own caller
+    // carousel's initial PageDwellSeconds pause is handled by its own caller
     // above; the trick carousel has no equivalent (it's already the result
     // of an explicit player action, not the first thing shown at boot).
     private void UpdateCarouselGeneric(GameObject[] pages, GameObject background, ref int lastPage, ref float dwellElapsed)
@@ -818,7 +858,7 @@ public class StartScreenController : MonoBehaviour
     // component's own CycleDuration) so this carousel doesn't cut them off
     // partway through — gesture pages specifically ask for
     // GestureDiagramAnimation.RepeatCount full loops before advancing.
-    // Falls back to the plain CarouselInterval for static pages (checklists,
+    // Falls back to PreGameScreenTiming.PageDwellSeconds for static pages (checklists,
     // object grids, plain diagrams) that don't have any of these.
     private float GetPageDwellDuration(GameObject[] pages, int pageIndex)
     {
@@ -826,25 +866,25 @@ public class StartScreenController : MonoBehaviour
             ? pages[pageIndex]
             : null;
         if (page == null)
-            return CarouselInterval;
+            return PreGameScreenTiming.PageDwellSeconds;
 
         ArchTrickAnimation arch = page.GetComponent<ArchTrickAnimation>();
         if (arch != null)
-            return Mathf.Max(CarouselInterval, arch.TotalDisplayDuration);
+            return Mathf.Max(PreGameScreenTiming.PageDwellSeconds, arch.TotalDisplayDuration);
 
         RingTrickAnimation ring = page.GetComponent<RingTrickAnimation>();
         if (ring != null)
-            return Mathf.Max(CarouselInterval, ring.TotalDisplayDuration);
+            return Mathf.Max(PreGameScreenTiming.PageDwellSeconds, ring.TotalDisplayDuration);
 
         GestureDiagramAnimation gesture = page.GetComponent<GestureDiagramAnimation>();
         if (gesture != null)
-            return Mathf.Max(CarouselInterval, gesture.TotalDisplayDuration);
+            return Mathf.Max(PreGameScreenTiming.PageDwellSeconds, gesture.TotalDisplayDuration);
 
         TrickDiagramAnimation trick = page.GetComponent<TrickDiagramAnimation>();
         if (trick != null)
-            return Mathf.Max(CarouselInterval, trick.TotalDisplayDuration);
+            return Mathf.Max(PreGameScreenTiming.PageDwellSeconds, trick.TotalDisplayDuration);
 
-        return CarouselInterval;
+        return PreGameScreenTiming.PageDwellSeconds;
     }
 
     private static void SetPlayerControlEnabled(GameObject player, bool value)
@@ -874,40 +914,42 @@ public class StartScreenController : MonoBehaviour
         joystick.enabled = enabled;
     }
 
-    // Nothing's chosen a controller yet on the button-selection menu (that's
-    // what row 1 picks), so it listens for whichever gesture source is
-    // actually available — real sensors if connected, the keyboard
-    // simulator otherwise — on both players at once, regardless of
-    // whatever a training session just set gestureRight/gestureLeft to
-    // (see BeginTraining). Called once from Awake, and again on every path
-    // back to this menu (ExitTrickCarouselToMenu, ExitTraining) so a
-    // keyboard-only training visit doesn't leave the confirm-jump gesture
-    // dead once you're back.
+    // Menu: P1 (left, sensors) always on gestureLeft; joystick stays active
+    // for menu navigation whenever plugged in. Gameplay uses ApplyInputScheme.
     private void RestoreMenuGestureMode()
     {
-        bool useRealSensors = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
-        EnableGestureForMenu(gestureRight, useRealSensors);
-        EnableGestureForMenu(gestureLeft, useRealSensors);
-    }
-
-    // Menu-only: turns a GestureInput on regardless of the (not yet made)
-    // controller choice, purely so this screen can read hand state from it.
-    // Harmless to actual gameplay — PlayerController is disabled at this
-    // point, so nothing consumes GestureInput's output but this menu.
-    // BeginGame overwrites .enabled/.UseRealSensors with the real choice
-    // right after, once a mode is confirmed.
-    private static void EnableGestureForMenu(GestureInput gesture, bool useRealSensors)
-    {
-        if (gesture == null)
+        if (!_useHardwareInput)
+        {
+            SetGestureEnabled(gestureLeft, false, false);
+            SetGestureEnabled(gestureRight, false, false);
+            SetJoystickEnabled(joystickLeft, false);
+            SetJoystickEnabled(joystickRight, false);
             return;
+        }
 
-        gesture.enabled = true;
-        gesture.UseRealSensors = useRealSensors;
+        bool joystickConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
+        SetJoystickEnabled(joystickLeft, false);
+        SetJoystickEnabled(joystickRight, joystickConnected);
+
+        if (_selectedPlayers == 2)
+        {
+            SetGestureEnabled(gestureLeft, true, true);
+            if (joystickConnected)
+                SetGestureEnabled(gestureRight, false, false);
+            else
+                SetGestureEnabled(gestureRight, true, true);
+        }
+        else
+        {
+            SetGestureEnabled(gestureLeft, true, true);
+            SetGestureEnabled(gestureRight, false, false);
+        }
     }
 
     private static bool IsLeanLeftDown(GestureInput gesture) => gesture != null && gesture.enabled && gesture.LeanLeftDown;
     private static bool IsLeanRightDown(GestureInput gesture) => gesture != null && gesture.enabled && gesture.LeanRightDown;
-    private static bool IsJumpDown(GestureInput gesture) => gesture != null && gesture.enabled && gesture.JumpDown;
+    private static bool IsLeanLeftHeld(GestureInput gesture) => gesture != null && gesture.enabled && gesture.LeanLeftHeld;
+    private static bool IsLeanRightHeld(GestureInput gesture) => gesture != null && gesture.enabled && gesture.LeanRightHeld;
     private static bool IsDuckHeld(GestureInput gesture) => gesture != null && gesture.enabled && gesture.DuckHeld;
     // A real joystick (player-right's own hardware now, see joystickRight)
     // needs the same hold-to-exit path gesture already has — without this a
@@ -915,18 +957,291 @@ public class StartScreenController : MonoBehaviour
     // to back out of training at all.
     private static bool IsDuckHeld(JoystickInput joystick) => joystick != null && joystick.enabled && joystick.DownHeld;
 
-    // "Both hands up, held" doesn't mean anything during actual play (only
-    // the flapping motion does, to avoid an accidental jump from just
-    // resting hands up) — but it's a natural, otherwise-unused signal for
-    // "move the row cursor up" here, so this menu reads it directly off
-    // GestureInput's raw per-hand state instead of its interpreted Jump.
-    private static bool EdgeBothHandsUp(GestureInput gesture, ref bool prev)
+    // Training exit: every active player must hold down together (same rule
+    // as DuckToExitController during a real run). Reads hardware directly —
+    // PlayerController is disabled during training; P1 duck reads gestureLeft
+    // or CombinedBoard mm directly (see IsPlayerOneTrainingExitHeld).
+    private const int TrainingSensorDownThresholdMm = 100; // GestureInput.DownThresholdMm
+
+    private bool AreAllActivePlayersHoldingTrainingExit()
     {
-        bool now = gesture != null && gesture.enabled && gesture.LeftHandUp && gesture.RightHandUp;
-        bool edgeUp = now && !prev;
-        prev = now;
-        return edgeUp;
+        if (_selectedPlayers == 1)
+            return IsPlayerOneTrainingExitHeld() || IsPlayerTwoTrainingExitHeld();
+
+        return IsPlayerOneTrainingExitHeld() && IsPlayerTwoTrainingExitHeld();
     }
+
+    private static bool CombinedBoardSendsHandSensors()
+    {
+        var js = JoystickSerial.Instance;
+        return js != null && js.IsConnected && js.HasHandSensors;
+    }
+
+    private static bool CombinedBoardSensorDuckHeld()
+    {
+        var js = JoystickSerial.Instance;
+        if (js == null || !js.IsConnected)
+            return false;
+        int left = js.HandLeftMm;
+        int right = js.HandRightMm;
+        if (left < 0 || right < 0)
+            return false;
+        return left <= TrainingSensorDownThresholdMm && right <= TrainingSensorDownThresholdMm;
+    }
+
+    private bool IsPlayerOneTrainingExitHeld()
+    {
+        if (CombinedBoardSendsHandSensors())
+            return CombinedBoardSensorDuckHeld();
+        if (IsDuckHeld(gestureLeft))
+            return true;
+        if (!_useHardwareInput && Input.GetKey(KeyCode.S))
+            return true;
+        return false;
+    }
+
+    private bool IsPlayerTwoTrainingExitHeld()
+    {
+        if (IsDuckHeld(joystickRight) || IsDuckHeld(joystickLeft))
+            return true;
+        var js = JoystickSerial.Instance;
+        if (js != null && js.IsConnected && js.Down)
+            return true;
+        if (IsDuckHeld(gestureRight))
+            return true;
+        if (!_useHardwareInput && Input.GetKey(KeyCode.K))
+            return true;
+        return false;
+    }
+
+    private void AppendMenuJoystickNav(ref bool left, ref bool right)
+    {
+        if (JoystickSerial.Instance == null || !JoystickSerial.Instance.IsConnected)
+            return;
+
+        left |= IsJoystickLeftDown(joystickRight) || IsJoystickLeftDown(joystickLeft);
+        right |= IsJoystickRightDown(joystickRight) || IsJoystickRightDown(joystickLeft);
+    }
+
+    private bool MenuHorizontalLeftHeld()
+    {
+        return Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.J)
+            || MenuSensorLeanLeftHeld()
+            || IsJoystickLeftHeld(joystickRight) || IsJoystickLeftHeld(joystickLeft)
+            || (JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected && JoystickSerial.Instance.Left);
+    }
+
+    private bool MenuHorizontalRightHeld()
+    {
+        return Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.L)
+            || MenuSensorLeanRightHeld()
+            || IsJoystickRightHeld(joystickRight) || IsJoystickRightHeld(joystickLeft)
+            || (JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected && JoystickSerial.Instance.Right);
+    }
+
+    private void ApplyMenuHorizontalNavLock(ref bool left, ref bool right)
+    {
+        if (_menuHorizontalNavLocked)
+        {
+            left = false;
+            right = false;
+            if (!MenuHorizontalLeftHeld() && !MenuHorizontalRightHeld())
+                _menuHorizontalNavLocked = false;
+            return;
+        }
+
+        if (left || right)
+            _menuHorizontalNavLocked = true;
+    }
+
+    private void ResetMenuHorizontalNavLock()
+    {
+        _menuHorizontalNavLocked = false;
+    }
+
+    private void UpdateMenuJoystickUp(ref bool up)
+    {
+        if (JoystickSerial.Instance == null || !JoystickSerial.Instance.IsConnected)
+        {
+            ResetJoystickUpHold();
+            _prevJoystickUpHeld = false;
+            return;
+        }
+
+        bool held = IsJoystickUpHeld(joystickRight) || IsJoystickUpHeld(joystickLeft);
+        if (held)
+            _joystickUpHoldTimer += Time.deltaTime;
+        else if (_prevJoystickUpHeld && _joystickUpHoldTimer < MenuJoystickUpTapMax)
+            up = true;
+
+        if (!held)
+            ResetJoystickUpHold();
+
+        _prevJoystickUpHeld = held;
+    }
+
+    // A flap needs two 55 mm swings inside 0.9 s before HandFlapTracker calls
+    // it a flap, so the FIRST downstroke lands both hands in the Down zone
+    // while _menuSensorFlapping is still false. On the upper rows a down is an
+    // instant edge, so that single frame was enough to walk the cursor down at
+    // the start of every jump gesture. Requiring the duck to survive longer
+    // than a downstroke closes the window the tracker cannot cover.
+    private const float MenuSensorDuckMinHold = 0.25f;
+    private float _menuSensorDuckHeldFor;
+
+    private void UpdateMenuDownHold(ref bool downEdge)
+    {
+        if (MenuSensorDuckHeld())
+            _menuSensorDuckHeldFor += Time.deltaTime;
+        else
+            _menuSensorDuckHeldFor = 0f;
+
+        // Keyboard and joystick are unambiguous — no flap can be mistaken for
+        // them, so they stay instant.
+        bool held = Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.K)
+            || _menuSensorDuckHeldFor >= MenuSensorDuckMinHold
+            || IsJoystickDownHeld(joystickRight) || IsJoystickDownHeld(joystickLeft)
+            || ArcadeConfirmHeld();
+
+        // Upper rows have nothing to confirm — move down on the first frame
+        // "down" is held. Only the start/training row uses hold-to-confirm.
+        if (_row != StartRowIndex)
+        {
+            if (held && !_prevMenuDownHeld)
+                downEdge = true;
+
+            if (!held && _prevMenuDownHeld)
+                _menuSuppressFlapUntil = Time.time + 0.35f;
+
+            _prevMenuDownHeld = held;
+            ResetMenuDownHold();
+            return;
+        }
+
+        if (held)
+        {
+            _menuDownHoldTimer += Time.deltaTime;
+            if (!_menuDownConfirmTriggered && _menuDownHoldTimer >= MenuConfirmHold)
+            {
+                _menuDownConfirmTriggered = true;
+                if (_selectedStartOption == 0)
+                    BeginGame();
+                else
+                    BeginTraining();
+            }
+        }
+        else if (_prevMenuDownHeld)
+        {
+            // Short tap = move row down; a hold (countdown attempt) must not
+            // fire navigation when the player releases early.
+            if (_menuDownHoldTimer < MenuConfirmHold
+                && !_menuDownConfirmTriggered
+                && _menuDownHoldTimer < MenuJoystickUpTapMax)
+                downEdge = true;
+            // Rising hands after a duck often look like a flap — ignore up
+            // briefly so "down" doesn't accidentally become "up" on release.
+            _menuSuppressFlapUntil = Time.time + 0.35f;
+            ResetMenuDownHold();
+        }
+
+        UpdateMenuConfirmCountdown(held);
+        _prevMenuDownHeld = held;
+    }
+
+    private void UpdateMenuConfirmCountdown(bool downHeld)
+    {
+        if (menuConfirmCountdownText == null)
+            return;
+
+        bool show = downHeld
+            && _row == StartRowIndex
+            && !_menuDownConfirmTriggered
+            && _menuDownHoldTimer < MenuConfirmHold;
+
+        menuConfirmCountdownText.gameObject.SetActive(show);
+        if (!show)
+            return;
+
+        int secondsLeft = Mathf.Clamp(
+            Mathf.CeilToInt(MenuConfirmHold - _menuDownHoldTimer),
+            1,
+            Mathf.CeilToInt(MenuConfirmHold));
+        menuConfirmCountdownText.text = secondsLeft.ToString();
+        PositionMenuConfirmCountdownOverSelection();
+    }
+
+    private RectTransform GetActiveSelectionButtonRect()
+    {
+        if (_row == PlayersRowIndex)
+            return (_selectedPlayers == 1 ? option1Bg : option2Bg)?.rectTransform;
+        if (_row == LanesRowIndex && laneOptionBgs != null
+            && _selectedLanes >= 0 && _selectedLanes < laneOptionBgs.Length)
+            return laneOptionBgs[_selectedLanes]?.rectTransform;
+        if (_row == StartRowIndex)
+            return (_selectedStartOption == 0 ? startBg : trainingBg)?.rectTransform;
+        return null;
+    }
+
+    private void PositionMenuConfirmCountdownOverSelection()
+    {
+        if (menuConfirmCountdownText == null)
+            return;
+
+        RectTransform target = GetActiveSelectionButtonRect();
+        RectTransform countdownRt = menuConfirmCountdownText.rectTransform;
+        if (target == null || countdownRt == null)
+            return;
+
+        Canvas canvas = menuConfirmCountdownText.canvas;
+        if (canvas == null)
+            return;
+
+        countdownRt.SetAsLastSibling();
+
+        Vector3 worldCenter = target.TransformPoint(target.rect.center);
+        Camera cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(cam, worldCenter);
+        RectTransform canvasRt = canvas.transform as RectTransform;
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRt, screenPoint, cam, out Vector2 localPoint))
+            countdownRt.anchoredPosition = localPoint;
+    }
+
+    private void ResetMenuDownHold()
+    {
+        _menuDownHoldTimer = 0f;
+        _menuDownConfirmTriggered = false;
+        UpdateMenuConfirmCountdown(false);
+    }
+
+    private void ResetJoystickUpHold()
+    {
+        _joystickUpHoldTimer = 0f;
+        _joystickUpConfirmTriggered = false;
+    }
+
+    private static bool IsJoystickLeftDown(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.LeftDown;
+
+    private static bool IsJoystickRightDown(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.RightDown;
+
+    private static bool IsJoystickUpHeld(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.UpHeld;
+
+    private static bool IsJoystickLeftHeld(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.LeftHeld;
+
+    private static bool IsJoystickRightHeld(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.RightHeld;
+
+    private static bool IsJoystickDownHeld(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.DownHeld;
+
+    private static bool IsJoystickDownDown(JoystickInput joystick) =>
+        joystick != null && joystick.enabled && joystick.DownDown;
+
+    private static bool IsFlapDown(GestureInput gesture) =>
+        gesture != null && gesture.enabled && gesture.JumpDown;
 
     private static bool EdgeDuck(GestureInput gesture, ref bool prev)
     {
@@ -935,5 +1250,417 @@ public class StartScreenController : MonoBehaviour
         prev = now;
         return edgeUp;
     }
+
+    private int MinSelectableLaneIndex() => _selectedPlayers == 1 ? 0 : 1;
+
+    private int EffectiveLaneCount()
+    {
+        int laneCount = _selectedLanes + 1;
+        if (_selectedPlayers == 2 && laneCount < 2)
+            laneCount = 2;
+        return laneCount;
+    }
+
+    // Rebuild road width/dividers and reposition players while the menu is
+    // still up — same geometry BeginGame applies, so the background matches
+    // the selection before Start is pressed.
+    private void ApplyRoadPreview()
+    {
+        int laneCount = EffectiveLaneCount();
+        if (_roadPreviewApplied && laneCount == _appliedPreviewLaneCount && _selectedPlayers == _appliedPreviewPlayers)
+            return;
+
+        RoadGeometryRuntime.Apply(laneCount, _selectedPlayers);
+        _appliedPreviewLaneCount = laneCount;
+        _appliedPreviewPlayers = _selectedPlayers;
+        _roadPreviewApplied = true;
+    }
+
+    private void UpdateLaneOptionVisuals()
+    {
+        int minLane = MinSelectableLaneIndex();
+        for (int i = 0; i < LaneOptionCount; i++)
+        {
+            bool disabled = i < minLane;
+            bool selected = i == _selectedLanes;
+            if (laneOptionBgs != null && i < laneOptionBgs.Length && laneOptionBgs[i] != null)
+                laneOptionBgs[i].color = disabled ? DisabledColor : selected ? SelectedColor : UnselectedColor;
+            if (laneOptionTexts != null && i < laneOptionTexts.Length && laneOptionTexts[i] != null)
+            {
+                laneOptionTexts[i].color = disabled ? DisabledTextColor : Color.white;
+                laneOptionTexts[i].text = (selected ? "[X] " : "[ ] ") + (i + 1);
+            }
+        }
+    }
+
+    private void ApplyInputScheme()
+    {
+        if (_useHardwareInput)
+        {
+            if (_selectedPlayers == 2)
+            {
+                SetGestureEnabled(gestureLeft, true, true);
+                SetJoystickEnabled(joystickLeft, false);
+
+                bool joystickConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
+                if (joystickConnected)
+                {
+                    SetGestureEnabled(gestureRight, false, false);
+                    SetJoystickEnabled(joystickRight, true);
+                }
+                else
+                {
+                    SetGestureEnabled(gestureRight, true, true);
+                    SetJoystickEnabled(joystickRight, false);
+                }
+            }
+            else
+            {
+                // 1-player: P1 (left, light) on sensors only.
+                SetGestureEnabled(gestureLeft, true, true);
+                SetJoystickEnabled(joystickLeft, false);
+                SetGestureEnabled(gestureRight, false, false);
+                SetJoystickEnabled(joystickRight, false);
+            }
+        }
+        else
+        {
+            SetGestureEnabled(gestureLeft, false, false);
+            SetGestureEnabled(gestureRight, false, false);
+            SetJoystickEnabled(joystickLeft, false);
+            SetJoystickEnabled(joystickRight, false);
+        }
+    }
+
+    // Clamps, deliberately — no wrap-around. The list is 3 short rows fully
+    // visible at once, so wrapping reads as "the cursor jumped somewhere
+    // random" rather than as a convenience: pressing down on the last row
+    // used to land you back on the first one. It bit "down" specifically
+    // because a short down-tap on the start/training row still counts as a
+    // nav edge (see UpdateMenuDownHold — it has to, so an aborted
+    // hold-to-confirm doesn't get stuck), and that edge then wrapped 2 -> 0.
+    private void MoveRow(int delta)
+    {
+        int next = Mathf.Clamp(_row + delta, 0, RowCount - 1);
+        if (next == _row)
+            return;
+
+        _row = next;
+        UpdateVisuals();
+    }
+
+    private void RefreshControllerDetection()
+    {
+        bool wasHardware = _useHardwareInput;
+        _useHardwareInput = IsHardwareConnected();
+
+        if (_useHardwareInput)
+            _controllerDetectionSettled = true;
+
+        UpdateControllerStatusText();
+        UpdateMenuHelpText();
+        UpdateMenuGestureDebugHud();
+
+        if (wasHardware != _useHardwareInput)
+            RestoreMenuGestureMode();
+    }
+
+    private void HideScoreHudShowGestureDebug()
+    {
+        GameplayHudVisibility.SetWedgePanelsVisible(false);
+        GameplayHudVisibility.SetTricksHudVisible(false);
+        UpdateMenuGestureDebugHud();
+    }
+
+    private void UpdateMenuGestureDebugHud()
+    {
+        GameplayHudVisibility.SetGestureHudVisible(_useHardwareInput);
+    }
+
+    private bool TryReadCombinedBoardHandMm(out int leftMm, out int rightMm)
+    {
+        leftMm = -1;
+        rightMm = -1;
+        if (!CombinedBoardSendsHandSensors())
+            return false;
+
+        var js = JoystickSerial.Instance;
+        leftMm = GestureInput.SanitizeDistanceMm(js.HandLeftMm);
+        rightMm = GestureInput.SanitizeDistanceMm(js.HandRightMm);
+        return true;
+    }
+
+    // A flap drives both hands through the Down zone on every downstroke, so
+    // the raw-distance reads below would see duck (and flickering leans) all
+    // the way through a jump gesture. GestureInput already guards against
+    // exactly this — while flapping it force-clears DuckHeld/LeanHeld — but
+    // the menu bypasses GestureInput and reads the board directly, so it has
+    // to make the same guard itself.
+    //
+    // Symptom this fixes: on the sensors the HUD lit up ПРЫЖОК (that path goes
+    // through GestureInput and was clean) while the menu refused to move up —
+    // line "if (MenuSensorDuckHeld() ...) up = false;" cancelled it every
+    // frame, and UpdateMenuDownHold read the same false duck as a down-tap, so
+    // a flap actually walked the cursor DOWN until it hit the last row.
+    private readonly GestureInput.HandFlapTracker _menuLeftFlapTracker = new GestureInput.HandFlapTracker();
+    private readonly GestureInput.HandFlapTracker _menuRightFlapTracker = new GestureInput.HandFlapTracker();
+    private bool _menuSensorFlapping;
+
+    // Observe() mutates the trackers, so this must run exactly once per frame,
+    // before anything reads MenuSensorDuckHeld/LeanHeld.
+    private void UpdateMenuSensorFlapState()
+    {
+        if (!TryReadCombinedBoardHandMm(out int leftMm, out int rightMm))
+        {
+            _menuSensorFlapping = false;
+            return;
+        }
+
+        _menuSensorFlapping = GestureInput.BothHandsFlapping(
+            _menuLeftFlapTracker, _menuRightFlapTracker, leftMm, rightMm);
+    }
+
+    private bool MenuSensorDuckHeld()
+    {
+        if (TryReadCombinedBoardHandMm(out int leftMm, out int rightMm))
+            return !_menuSensorFlapping && GestureInput.DuckHeldFromDistances(leftMm, rightMm);
+
+        return IsDuckHeld(gestureLeft) || IsDuckHeld(gestureRight);
+    }
+
+    private bool MenuSensorLeanLeftHeld()
+    {
+        if (TryReadCombinedBoardHandMm(out int leftMm, out int rightMm))
+            return !_menuSensorFlapping && GestureInput.LeanLeftHeldFromDistances(leftMm, rightMm);
+
+        return IsLeanLeftHeld(gestureLeft) || IsLeanLeftHeld(gestureRight);
+    }
+
+    private bool MenuSensorLeanRightHeld()
+    {
+        if (TryReadCombinedBoardHandMm(out int leftMm, out int rightMm))
+            return !_menuSensorFlapping && GestureInput.LeanRightHeldFromDistances(leftMm, rightMm);
+
+        return IsLeanRightHeld(gestureLeft) || IsLeanRightHeld(gestureRight);
+    }
+
+    private void AppendMenuCombinedBoardNav(ref bool left, ref bool right, ref bool up)
+    {
+        if (!TryReadCombinedBoardHandMm(out int leftMm, out int rightMm))
+            return;
+
+        // Same flap guard as the helpers above: mid-flap the two hands are
+        // rarely level, so without this every jump gesture also fires a lean
+        // edge and the cursor jumps sideways.
+        bool leanLeftHeld = !_menuSensorFlapping && GestureInput.LeanLeftHeldFromDistances(leftMm, rightMm);
+        bool leanRightHeld = !_menuSensorFlapping && GestureInput.LeanRightHeldFromDistances(leftMm, rightMm);
+
+        if (leanLeftHeld && !_menuCombinedPrevLeanLeftHeld)
+            left = true;
+        if (leanRightHeld && !_menuCombinedPrevLeanRightHeld)
+            right = true;
+
+        _menuCombinedPrevLeanLeftHeld = leanLeftHeld;
+        _menuCombinedPrevLeanRightHeld = leanRightHeld;
+    }
+
+    private void UpdateControllerStatusText()
+    {
+        if (controllerStatusText == null)
+            return;
+
+        if (_useHardwareInput)
+        {
+            controllerStatusText.gameObject.SetActive(true);
+            controllerStatusText.text = "КОНТРОЛЛЕР ОК";
+            return;
+        }
+
+        controllerStatusText.gameObject.SetActive(true);
+        controllerStatusText.text = _controllerDetectionSettled
+            ? "КОНТРОЛЛЕР НЕ ОБНАРУЖЕН"
+            : ControllerDetectBase + new string('.', _controllerDetectDotCount);
+    }
+
+    private void UpdateMenuHelpText()
+    {
+        if (menuHelpText != null)
+            menuHelpText.text = _useHardwareInput ? MenuHelpHardware : MenuHelpKeyboard;
+
+        // Same switch on the upfront carousel page, so the instructions a
+        // player reads before the menu match the hint under the menu itself.
+        if (menuSelectionPlayer1Row != null)
+            menuSelectionPlayer1Row.text = _useHardwareInput
+                ? MenuSelectionPlayer1Hardware : MenuSelectionPlayer1Keyboard;
+
+        if (menuSelectionPlayer2Row != null)
+            menuSelectionPlayer2Row.text = _useHardwareInput
+                ? MenuSelectionPlayer2Hardware : MenuSelectionPlayer2Keyboard;
+    }
+
+    private static bool IsHardwareConnected()
+    {
+        bool sensorsConnected = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
+        bool combinedBoardConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
+        return sensorsConnected || combinedBoardConnected;
+    }
+
+    private void HideLegacyControllerRow()
+    {
+        if (controllerRowBg != null)
+            controllerRowBg.gameObject.SetActive(false);
+    }
+
+    private void EnsureLaneRowUI()
+    {
+        if (lanesRowBg != null && laneOptionBgs != null && laneOptionBgs.Length == LaneOptionCount)
+            return;
+        if (canvasRoot == null)
+            return;
+
+        var rowGo = new GameObject("LanesRow");
+        rowGo.transform.SetParent(canvasRoot.transform, false);
+        lanesRowBg = rowGo.AddComponent<Image>();
+        lanesRowBg.color = RowIdleColor;
+        lanesRowOutline = rowGo.AddComponent<Outline>();
+        lanesRowOutline.effectDistance = new Vector2(4f, -4f);
+        RectTransform rowRt = rowGo.GetComponent<RectTransform>();
+        rowRt.anchorMin = new Vector2(0.5f, 0.5f);
+        rowRt.anchorMax = new Vector2(0.5f, 0.5f);
+        rowRt.pivot = new Vector2(0.5f, 0.5f);
+        rowRt.sizeDelta = new Vector2(900f, 80f);
+        rowRt.anchoredPosition = new Vector2(0f, -390f);
+
+        laneOptionBgs = new Image[LaneOptionCount];
+        laneOptionTexts = new Text[LaneOptionCount];
+        float spacing = 110f;
+        float startX = -(LaneOptionCount - 1) * spacing / 2f;
+        Font font = Resources.Load<Font>("lady_bug/Fonts/ComicCAT")
+            ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        for (int i = 0; i < LaneOptionCount; i++)
+        {
+            var optionGo = new GameObject("Lane" + (i + 1));
+            optionGo.transform.SetParent(rowGo.transform, false);
+            laneOptionBgs[i] = optionGo.AddComponent<Image>();
+            laneOptionBgs[i].color = UnselectedColor;
+            RectTransform optionRt = optionGo.GetComponent<RectTransform>();
+            optionRt.anchorMin = new Vector2(0.5f, 0.5f);
+            optionRt.anchorMax = new Vector2(0.5f, 0.5f);
+            optionRt.pivot = new Vector2(0.5f, 0.5f);
+            optionRt.sizeDelta = new Vector2(90f, 60f);
+            optionRt.anchoredPosition = new Vector2(startX + i * spacing, 0f);
+
+            var textGo = new GameObject("Text");
+            textGo.transform.SetParent(optionGo.transform, false);
+            laneOptionTexts[i] = textGo.AddComponent<Text>();
+            laneOptionTexts[i].font = font;
+            laneOptionTexts[i].fontSize = 26;
+            laneOptionTexts[i].fontStyle = FontStyle.Bold;
+            laneOptionTexts[i].alignment = TextAnchor.MiddleCenter;
+            laneOptionTexts[i].color = Color.white;
+            RectTransform textRt = textGo.GetComponent<RectTransform>();
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.offsetMin = Vector2.zero;
+            textRt.offsetMax = Vector2.zero;
+        }
+    }
+
+    private void EnsureControllerStatusText()
+    {
+        if (controllerStatusText == null && canvasRoot != null)
+        {
+            var statusGo = new GameObject("ControllerStatusText");
+            statusGo.transform.SetParent(canvasRoot.transform, false);
+            controllerStatusText = statusGo.AddComponent<Text>();
+            controllerStatusText.font = Resources.Load<Font>("lady_bug/Fonts/ComicCAT")
+                ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            controllerStatusText.text = ControllerDetectBase + new string('.', ControllerDetectDotMin);
+            statusGo.AddComponent<Outline>().effectColor = Color.black;
+        }
+
+        if (controllerStatusText == null)
+            return;
+
+        ApplyControllerStatusLayout();
+    }
+
+    private void EnsureMenuHelpText()
+    {
+        if (menuHelpText == null && canvasRoot != null)
+        {
+            Transform helpTransform = canvasRoot.transform.Find("MenuHelpText");
+            if (helpTransform != null)
+                menuHelpText = helpTransform.GetComponent<Text>();
+        }
+
+        if (menuHelpText == null)
+            return;
+
+        menuHelpText.fontSize = 20;
+        menuHelpText.fontStyle = FontStyle.Bold;
+        menuHelpText.alignment = TextAnchor.LowerRight; // bottom-right; swapped with the controller indicator
+        menuHelpText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        menuHelpText.verticalOverflow = VerticalWrapMode.Overflow;
+        menuHelpText.color = new Color(0.9f, 0.9f, 0.9f);
+    }
+
+    private void EnsureMenuConfirmCountdownText()
+    {
+        if (menuConfirmCountdownText == null && canvasRoot != null)
+        {
+            Transform countdownTransform = canvasRoot.transform.Find("MenuConfirmCountdown");
+            if (countdownTransform != null)
+                menuConfirmCountdownText = countdownTransform.GetComponent<Text>();
+            else
+            {
+                var countdownGo = new GameObject("MenuConfirmCountdown");
+                countdownGo.transform.SetParent(canvasRoot.transform, false);
+                menuConfirmCountdownText = countdownGo.AddComponent<Text>();
+                menuConfirmCountdownText.font = Resources.Load<Font>("lady_bug/Fonts/ComicCAT")
+                    ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                countdownGo.AddComponent<Outline>().effectColor = Color.black;
+            }
+        }
+
+        if (menuConfirmCountdownText == null)
+            return;
+
+        ApplyMenuConfirmCountdownLayout(menuConfirmCountdownText);
+        menuConfirmCountdownText.gameObject.SetActive(false);
+    }
+
+    static void ApplyMenuConfirmCountdownLayout(Text text)
+    {
+        text.fontSize = 120;
+        text.fontStyle = FontStyle.Bold;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = new Color(1f, 0.85f, 0.15f);
+        RectTransform rt = text.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(150f, 150f);
+        rt.anchoredPosition = Vector2.zero;
+    }
+
+    static void ApplyControllerStatusLayout(Text text)
+    {
+        text.fontSize = 20;
+        text.fontStyle = FontStyle.Bold;
+        // Bottom-LEFT — swapped with MenuHelpText, which took the right corner.
+        // Keep in step with SceneSetup's own build-time placement.
+        text.alignment = TextAnchor.LowerLeft;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.color = new Color(0.9f, 0.9f, 0.9f);
+        RectTransform rt = text.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(0f, 0f);
+        rt.pivot = new Vector2(0f, 0f);
+        rt.sizeDelta = new Vector2(680f, 80f);
+        rt.anchoredPosition = new Vector2(30f, 30f);
+    }
+
+    private void ApplyControllerStatusLayout() => ApplyControllerStatusLayout(controllerStatusText);
 }
 }

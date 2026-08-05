@@ -15,11 +15,21 @@ public class GestureRawValueIndicator : MonoBehaviour
 
     private void Update()
     {
-        if (valueText == null || gestureInput == null)
+        if (valueText == null)
             return;
 
-        valueText.text = "Л:" + gestureInput.LeftHandDistanceMm + "мм"
-                        + "  П:" + gestureInput.RightHandDistanceMm + "мм";
+        if (GestureInput.TryGetLiveHandDistances(gestureInput, out int leftMm, out int rightMm))
+        {
+            valueText.text = FormatHand("Л", leftMm) + "  " + FormatHand("П", rightMm);
+            return;
+        }
+
+        valueText.text = "Л:–мм  П:–мм";
+    }
+
+    private static string FormatHand(string label, int mm)
+    {
+        return mm < 0 ? label + ":–мм" : label + ":" + mm + "мм";
     }
 }
 }

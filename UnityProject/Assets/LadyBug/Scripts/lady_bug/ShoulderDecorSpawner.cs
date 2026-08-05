@@ -10,10 +10,9 @@ public class ShoulderDecorSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject[] prefabs;
     [SerializeField] private float roadHalfWidth = 8f;
-    // Must match CreateRoadShoulder in SceneSetup.cs — the dirt strip from
-    // (roadHalfWidth - pavementOverlap) to (roadHalfWidth + shoulderWidth - pavementOverlap).
+    // Must match CreateRoadShoulder — shoulder from (roadHalf + gap) outward.
     [SerializeField] private float shoulderWidth = 2.5f;
-    [SerializeField] private float pavementOverlap = 0.5f;
+    [SerializeField] private float shoulderGap = RoadGeometryRuntime.ShoulderGap;
     [SerializeField] private float innerSpawnMargin = 0.2f;
     [SerializeField] private float outerSpawnMargin = 0.35f;
     [SerializeField] private float spawnZ = 70f;
@@ -51,6 +50,11 @@ public class ShoulderDecorSpawner : MonoBehaviour
         _nextSpawnDistance = Random.Range(minSpawnDistance, maxSpawnDistance);
     }
 
+    public void ConfigureRoadHalfWidth(float halfWidth)
+    {
+        roadHalfWidth = halfWidth;
+    }
+
     private void Spawn()
     {
         if (prefabs == null || prefabs.Length == 0)
@@ -68,8 +72,8 @@ public class ShoulderDecorSpawner : MonoBehaviour
         GroundDecorInfo info = prefab.GetComponent<GroundDecorInfo>();
         float halfWidth = info != null ? info.visibleHalfWidth : GetPrefabHalfWidth(prefab);
         float visibleHeight = info != null ? info.visibleHeight : prefab.transform.position.y * 2f;
-        float shoulderInnerEdge = roadHalfWidth - pavementOverlap;
-        float shoulderOuterEdge = roadHalfWidth + shoulderWidth - pavementOverlap;
+        float shoulderInnerEdge = roadHalfWidth + shoulderGap;
+        float shoulderOuterEdge = roadHalfWidth + shoulderGap + RoadGeometryRuntime.ShoulderRenderWidth;
         float inner = shoulderInnerEdge + innerSpawnMargin + halfWidth;
         float outer = shoulderOuterEdge - outerSpawnMargin - halfWidth;
         if (inner > outer)

@@ -10,8 +10,8 @@ namespace LadyBug
 {
 
 // Reads the gesture-sensor Arduino (see ArduinoFirmware/GestureSensors) over
-// serial and exposes the latest hand-distance readings and brake-button
-// state for both players. Port I/O runs on a background thread; Update()
+// serial and exposes the latest hand-distance readings (player 1, left/right
+// mm). Port I/O runs on a background thread; Update()
 // just publishes the latest snapshot to the main thread. macOS only,
 // matching this project's build target (BuildScript.cs only builds
 // StandaloneOSX) — Unity doesn't expose System.IO.Ports, so this talks to
@@ -29,26 +29,25 @@ public sealed class GestureSensorSerial : MonoBehaviour
     public bool IsConnected { get; private set; }
     public int Player1LeftMm { get; private set; } = -1;
     public int Player1RightMm { get; private set; } = -1;
-    public bool Player1Brake { get; private set; }
-    public int Player2LeftMm { get; private set; } = -1;
-    public int Player2RightMm { get; private set; } = -1;
-    public bool Player2Brake { get; private set; }
 
     // Scaffold for an upcoming physical exit button on the controller —
     // which pin/button isn't decided yet, so this isn't wired into
     // ParseLine/the "G,..." wire protocol below at all yet and always
     // reads false. Once the button is chosen, extend the firmware sketch's
-    // line format and set this from the new field the same way Player1Brake
-    // etc. are set below — DuckToExitController already reacts to this
-    // going true the instant it's wired, no other changes needed there.
+    // line format and set this from the new field — DuckToExitController
+    // already reacts to this going true the instant it's wired, no other
+    // changes needed there.
     public bool ExitButtonPressed { get; private set; }
 
     private Thread _thread;
     private volatile bool _stopRequested;
     private volatile bool _connected;
     private readonly object _lock = new object();
-    private readonly int[] _latest = { -1, -1, -1, -1, -1, -1 };
+    private readonly int[] _latest = { -1, -1 };
     private bool _hasNewValues;
+    private bool _wasConnected;
+    private float _lastValuesTime;
+    private const float ValuesStaleSeconds = 0.5f;
 
     private void Awake()
     {
@@ -59,10 +58,11 @@ public sealed class GestureSensorSerial : MonoBehaviour
     // cabinet ONE combo board (ArduinoFirmware/CombinedBoard) carries the joystick
     // AND both height sensors, and the hub's arcade-controls package already owns
     // that port — two processes opening the same tty is exactly how you get a game
-    // that reads nothing. So when the facade is present the background thread is
-    // never started, and the readings this class publishes come from
-    // ArcadeInput.HeightA/HeightB instead. Everything downstream (GestureInput and
-    // its thresholds, the debug HUDs, StartScreenController's connected-check)
+    // that reads nothing (and, with the one-line combined "G,...,J,..." frame, a
+    // second reader also tears the line in half). So when the facade is present the
+    // background thread is never started, and the readings this class publishes come
+    // from ArcadeInput.HeightA/HeightB instead. Everything downstream (GestureInput
+    // and its thresholds, the debug HUDs, StartScreenController's connected-check)
     // keeps working through this same class, unchanged.
     private bool UseArcadeFacade => ArcadeControlsReader.Available;
 
@@ -91,29 +91,32 @@ public sealed class GestureSensorSerial : MonoBehaviour
             return;
         }
 
-        IsConnected = _connected;
+        bool connected = _connected;
+        IsConnected = connected;
+
+        if (!connected && _wasConnected)
+            ClearReadings();
+
+        _wasConnected = connected;
 
         lock (_lock)
         {
-            if (!_hasNewValues)
-                return;
-
-            _hasNewValues = false;
-            Player1LeftMm = _latest[0];
-            Player1RightMm = _latest[1];
-            Player1Brake = _latest[2] != 0;
-            Player2LeftMm = _latest[3];
-            Player2RightMm = _latest[4];
-            Player2Brake = _latest[5] != 0;
+            if (_hasNewValues)
+            {
+                _hasNewValues = false;
+                Player1LeftMm = _latest[0];
+                Player1RightMm = _latest[1];
+                _lastValuesTime = Time.realtimeSinceStartup;
+            }
         }
+
+        if (connected && Time.realtimeSinceStartup - _lastValuesTime > ValuesStaleSeconds)
+            ClearReadings();
     }
 
-    // Both player slots mirror the SAME pair of cabinet sensors on purpose: the
-    // cabinet is a one-player-at-a-time station with a single HeightA/HeightB pair
-    // (the combo board even sends "-1,-1,0" for player 2), while this class's two
-    // slots exist for the author's own two-board rig. Feeding both means whichever
-    // ladybug the menu ends up arming — PlayerRight solo or PlayerLeft in 2-player
-    // mode — reads the cabinet's real hands instead of a dead -1 channel.
+    // The cabinet is a one-player-at-a-time station with a single HeightA/HeightB
+    // pair, which is exactly what this class now publishes since the author's
+    // protocol change dropped the second player (and the brake) from the wire.
     private void ApplyArcadeHeights()
     {
         IsConnected = true;
@@ -121,18 +124,14 @@ public sealed class GestureSensorSerial : MonoBehaviour
         // Normalized height -> the millimetres this class publishes; the mapping itself
         // lives in ArcadeControlsReader so JoystickSerial's combined-board fields cannot
         // drift away from it.
-        int leftMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightA);
-        int rightMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightB);
+        Player1LeftMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightA);
+        Player1RightMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightB);
+    }
 
-        Player1LeftMm = leftMm;
-        Player1RightMm = rightMm;
-        Player2LeftMm = leftMm;
-        Player2RightMm = rightMm;
-
-        // Braking was removed from the game entirely, and the cabinet has no brake
-        // control at all (see the CombinedBoard sketch's own note) — stays false.
-        Player1Brake = false;
-        Player2Brake = false;
+    private void ClearReadings()
+    {
+        Player1LeftMm = -1;
+        Player1RightMm = -1;
     }
 
     private void RunLoop()
@@ -193,45 +192,56 @@ public sealed class GestureSensorSerial : MonoBehaviour
 
     private bool TryIdentify(string portPath)
     {
-        int fd = OpenPort(portPath);
-        if (fd < 0)
-            return false;
-
-        try
+        lock (MacSerialPort.ProbeLock)
         {
-            WriteAscii(fd, "?");
+            int fd = OpenPort(portPath);
+            if (fd < 0)
+                return false;
 
-            DateTime deadline = DateTime.UtcNow.AddSeconds(identificationTimeout);
-            StringBuilder line = new StringBuilder();
-            byte[] buffer = new byte[1];
-
-            while (DateTime.UtcNow < deadline)
+            try
             {
-                long read = MacNative.read(fd, buffer, (UIntPtr)1);
-                if (read <= 0)
+                MacSerialPort.SetDtr(fd, true);
+                Thread.Sleep(150);
+                MacNative.tcflush(fd, MacNative.FlushInputAndOutput);
+                WriteAscii(fd, "?");
+
+                DateTime deadline = DateTime.UtcNow.AddSeconds(identificationTimeout);
+                StringBuilder line = new StringBuilder();
+                byte[] buffer = new byte[1];
+
+                while (DateTime.UtcNow < deadline)
                 {
-                    Thread.Sleep(5);
-                    continue;
+                    long read = MacNative.read(fd, buffer, (UIntPtr)1);
+                    if (read <= 0)
+                    {
+                        Thread.Sleep(5);
+                        continue;
+                    }
+
+                    char c = (char)buffer[0];
+                    if (c == '\n')
+                    {
+                        string trimmed = line.ToString().Trim();
+                        line.Length = 0;
+                        if (trimmed == "BOARD,GESTURE_SENSORS")
+                            return true;
+                        // Combined / joystick board — not ours; bail immediately so
+                        // JoystickSerial can probe the same port without waiting.
+                        if (trimmed == "BOARD,JOYSTICK" || trimmed.StartsWith("J,"))
+                            return false;
+                    }
+                    else if (c != '\r')
+                    {
+                        line.Append(c);
+                    }
                 }
 
-                char c = (char)buffer[0];
-                if (c == '\n')
-                {
-                    if (line.ToString().Trim() == "BOARD,GESTURE_SENSORS")
-                        return true;
-                    line.Length = 0;
-                }
-                else if (c != '\r')
-                {
-                    line.Append(c);
-                }
+                return false;
             }
-
-            return false;
-        }
-        finally
-        {
-            MacNative.close(fd);
+            finally
+            {
+                MacNative.close(fd);
+            }
         }
     }
 
@@ -243,7 +253,12 @@ public sealed class GestureSensorSerial : MonoBehaviour
 
         try
         {
+            MacSerialPort.SetDtr(fd, true);
+            Thread.Sleep(400);
+            MacNative.tcflush(fd, MacNative.FlushInputAndOutput);
+
             _connected = true;
+            ClearReadings();
             Debug.Log("[GestureSensorSerial] Connected: " + portPath);
 
             StringBuilder line = new StringBuilder();
@@ -276,28 +291,29 @@ public sealed class GestureSensorSerial : MonoBehaviour
         }
     }
 
-    // Expects "G,<p1Left>,<p1Right>,<p1Brake>,<p2Left>,<p2Right>,<p2Brake>" —
-    // see ArduinoFirmware/GestureSensors for the exact protocol this is
-    // matched against. Brake fields are 0/1, distances are millimetres.
+    // Expects "G,<left_mm>,<right_mm>" — see ArduinoFirmware/GestureSensors.
     private void ParseLine(string trimmedLine)
     {
         if (!trimmedLine.StartsWith("G,"))
             return;
 
         string[] fields = trimmedLine.Split(',');
-        if (fields.Length != 7)
+        if (fields.Length != 3)
             return;
 
-        int[] values = new int[6];
-        for (int i = 0; i < 6; i++)
+        int[] values = new int[2];
+        for (int i = 0; i < 2; i++)
         {
             if (!int.TryParse(fields[i + 1], out values[i]))
                 return;
         }
 
+        values[0] = GestureInput.SanitizeDistanceMm(values[0]);
+        values[1] = GestureInput.SanitizeDistanceMm(values[1]);
+
         lock (_lock)
         {
-            Array.Copy(values, _latest, 6);
+            Array.Copy(values, _latest, 2);
             _hasNewValues = true;
         }
     }

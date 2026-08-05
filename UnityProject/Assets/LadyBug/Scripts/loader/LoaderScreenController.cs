@@ -48,7 +48,6 @@ public class LoaderScreenController : MonoBehaviour
     // off-screen rather than just past center — 2200 leaves a safe margin.
     [SerializeField] private float slideDistance = 2200f;
     [SerializeField] private float slideInDuration = 0.5f;
-    [SerializeField] private float holdDuration = 1.6f;
     [SerializeField] private float slideOutDuration = 0.5f;
 
     // Index-matched to Messages above — message i highlights a random
@@ -138,7 +137,7 @@ public class LoaderScreenController : MonoBehaviour
         RectTransform rt = messageText.rectTransform;
 
         yield return StartCoroutine(SlideX(rt, slideDistance, 0f, slideInDuration));
-        yield return new WaitForSeconds(holdDuration);
+        yield return new WaitForSeconds(PreGameScreenTiming.PageDwellSeconds);
         yield return StartCoroutine(SlideX(rt, 0f, -slideDistance, slideOutDuration));
     }
 

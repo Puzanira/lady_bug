@@ -8,8 +8,8 @@
 // this single board stands in for what would otherwise be two separate
 // ones. Identifies itself as a plain "BOARD,JOYSTICK" (not a new/different
 // board type) so it's recognized the same way a dedicated joystick board
-// already is; the "G,..." sensor line is sent alongside it on its own line
-// for whatever's meant to read it on that side.
+// already is; sensor + joystick data go out on one combined line (G first,
+// then J — see loop() below).
 //
 // Wiring:
 //   Joystick module:  GND->GND   +5V->5V   VRx->A0   VRy->A1   SW->(unused)
@@ -29,20 +29,12 @@
 // sketch. Library: Pololu VL53L0X (github.com/pololu/vl53l0x-arduino) — same
 // as GestureSensors.ino, NOT the heavier Adafruit one.
 //
-// Output: one "J," line and one "G," line per poll, ~15 Hz (a VL53L0X
-// reading takes real measurement time, so this board's own full sweep is
-// slower than the joystick-only board's 33 Hz — see MEASUREMENT_BUDGET_US):
-//   J,<up>,<down>,<left>,<right>
-//   G,<left_mm>,<right_mm>,<brake>,-1,-1,0
-// Joystick fields are 0/1, thresholded from the analog stick the same way
-// ArduinoFirmware/Joystick does. Sensor fields match GestureSensorSerial's
-// own "G,<p1Left>,<p1Right>,<p1Brake>,<p2Left>,<p2Right>,<p2Brake>" protocol
-// exactly — this board only ever carries one player's 2 sensors, so the
-// second player's 3 fields are always sent as -1,-1,0 (no sensor there, not
-// pressed) rather than a shorter/different line shape, for compatibility
-// with anything already parsing the full 7-field "G," format. No brake
-// button wired here (braking was removed from the game entirely) — that
-// field is always 0.
+// Output: one line per poll, ~15 Hz (a VL53L0X reading takes real
+// measurement time, so this board's own full sweep is slower than the
+// joystick-only board's 33 Hz — see MEASUREMENT_BUDGET_US):
+//   G,<left_mm>,<right_mm>,J,<up>,<down>,<left>,<right>
+// G block matches GestureSensorSerial's 3-field "G,..." shape; J block
+// matches ArduinoFirmware/Joystick.
 // Identity handshake: sending '?' gets a "BOARD,JOYSTICK" reply.
 
 #include <Wire.h>
@@ -73,6 +65,7 @@ const uint8_t SENSOR_ADDR[SENSOR_COUNT] = { 0x30, 0x31 };
 // sweep takes roughly 2x this value in the worst case.
 const uint32_t MEASUREMENT_BUDGET_US = 66000;
 const uint16_t SENSOR_TIMEOUT_MS = 150;
+const int NO_TARGET_MM = 2000; // VL53L0X reports ~8190 with no close target; map to -1
 
 VL53L0X sensors[SENSOR_COUNT];
 
@@ -139,16 +132,6 @@ void loop()
   int left = x <= LOW_THRESHOLD ? 1 : 0;
   int right = x >= HIGH_THRESHOLD ? 1 : 0;
 
-  Serial.print("J,");
-  Serial.print(up);
-  Serial.print(",");
-  Serial.print(down);
-  Serial.print(",");
-  Serial.print(left);
-  Serial.print(",");
-  Serial.println(right);
-
-  // --- Hand sensors ---
   int16_t leftMm = read_sensor_mm(0);
   int16_t rightMm = read_sensor_mm(1);
 
@@ -156,8 +139,14 @@ void loop()
   Serial.print(leftMm);
   Serial.print(",");
   Serial.print(rightMm);
-  Serial.print(",0,-1,-1,0"); // no brake button wired, no second player on this board
-  Serial.println();
+  Serial.print(",J,");
+  Serial.print(up);
+  Serial.print(",");
+  Serial.print(down);
+  Serial.print(",");
+  Serial.print(left);
+  Serial.print(",");
+  Serial.println(right);
 }
 
 // -1 for "no valid target" (out of range/timeout) — same convention
@@ -165,7 +154,7 @@ void loop()
 int16_t read_sensor_mm(uint8_t index)
 {
   uint16_t mm = sensors[index].readRangeSingleMillimeters();
-  if (sensors[index].timeoutOccurred())
+  if (sensors[index].timeoutOccurred() || mm >= NO_TARGET_MM)
     return -1;
   return (int16_t)mm;
 }
