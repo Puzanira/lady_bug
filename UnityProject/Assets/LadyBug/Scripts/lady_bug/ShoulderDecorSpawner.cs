@@ -11,7 +11,11 @@ public class ShoulderDecorSpawner : MonoBehaviour
     [SerializeField] private GameObject[] prefabs;
     [SerializeField] private float roadHalfWidth = 8f;
     // Must match CreateRoadShoulder — shoulder from (roadHalf + gap) outward.
+    // Nothing reads it since the spawner moved to RoadGeometryRuntime's spans, but
+    // SceneSetup still writes it into the scene, so the serialized field stays.
+#pragma warning disable CS0414 // written by SceneSetup, kept for scene/upstream parity
     [SerializeField] private float shoulderWidth = 2.5f;
+#pragma warning restore CS0414
     [SerializeField] private float shoulderGap = RoadGeometryRuntime.ShoulderGap;
     [SerializeField] private float innerSpawnMargin = 0.2f;
     [SerializeField] private float outerSpawnMargin = 0.35f;

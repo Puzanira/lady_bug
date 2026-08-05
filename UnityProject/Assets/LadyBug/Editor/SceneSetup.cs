@@ -2324,7 +2324,7 @@ public static class SceneSetup
         const float iconGridTop = 40f;
         const float iconGridLeft = -540f;
         const float iconGridRight = 540f;
-        const float iconCellWidth = 108f; // (iconGridRight - iconGridLeft) / iconCols
+        const float iconCellWidth = (iconGridRight - iconGridLeft) / iconCols; // 108
         const float iconCellHeight = 72f;
         const float iconSize = 54f;
 

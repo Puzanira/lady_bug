@@ -206,7 +206,11 @@ public class StartScreenController : MonoBehaviour
     private bool _prevMenuDownHeld;
     private bool _menuHorizontalNavLocked;
     private float _joystickUpHoldTimer;
+    // Reset alongside the other joystick-hold state but never read back — kept as
+    // the author left it so the next upstream merge has nothing to reconcile.
+#pragma warning disable CS0414 // assigned only; see above
     private bool _joystickUpConfirmTriggered;
+#pragma warning restore CS0414
     private bool _prevJoystickUpHeld;
 
     // CombinedBoard menu nav — lean edges as fallback when GestureInput hasn't

@@ -21,6 +21,14 @@ public static class KeyboardPlayShot
     private static int _phase;
     private static double _phaseStart;
     private static string _outPath;
+    // "gameplay" (default, historical behaviour) | "menu" | "final".
+    // menu  — shoot the pre-game screen without ever confirming.
+    // final — confirm, run, then force the win trigger and shoot the finale
+    //         after -shotDelay seconds, so the celebration FX (the author's
+    //         new Resources/Celebration PNG sequences) are on screen.
+    private static string _mode = "gameplay";
+    private static double _shotDelay = 2.5;
+    private static double _menuSettle = 1.5;
     private static bool _restoreEnterPlayOptions;
     private static EnterPlayModeOptions _savedOptions;
     private static bool _savedOptionsEnabled;
@@ -30,6 +38,16 @@ public static class KeyboardPlayShot
         _outPath = ArgValue("-shotPath");
         if (string.IsNullOrEmpty(_outPath))
             _outPath = Path.Combine(Application.temporaryCachePath, "ladybug-keyboard.png");
+
+        string mode = ArgValue("-shotMode");
+        if (!string.IsNullOrEmpty(mode))
+            _mode = mode;
+        string delay = ArgValue("-shotDelay");
+        if (!string.IsNullOrEmpty(delay) && double.TryParse(delay, out double parsed))
+        {
+            _shotDelay = parsed;
+            _menuSettle = parsed;
+        }
 
         // Keep statics (this state machine, its delegates) alive across the
         // edit->play transition for this batch session only; restored before exit.
@@ -64,14 +82,29 @@ public static class KeyboardPlayShot
                 }
                 break;
 
-            case 1: // menu settling (intro is skipped now; give Awake/Start a beat)
-                if (now - _phaseStart > 1.5)
+            // Menu settling (intro is skipped now; give Awake/Start a beat). In
+            // menu mode -shotDelay doubles as the settle time: the instruction
+            // carousel is deliberately blank for the first
+            // PreGameScreenTiming.PageDwellSeconds (7s), so a shot taken earlier
+            // shows a legitimately empty middle of the screen.
+            case 1:
+                if (now - _phaseStart > (_mode == "menu" ? _menuSettle : 1.5))
                 {
                     var menu = Object.FindAnyObjectByType<StartScreenController>();
                     if (menu == null)
                         Fail(3, "StartScreenController not found in play mode");
-                    // Same call the menu's Space/Enter confirm makes, with the
-                    // default selection: КЛАВИАТУРА (controller 0), 2 players.
+
+                    if (_mode == "menu")
+                    {
+                        // Nothing to confirm — the pre-game screen IS the subject.
+                        Debug.Log("[KeyboardPlayShot] menu mode: capturing the start screen.");
+                        WriteShot();
+                        _phase = 3;
+                        break;
+                    }
+
+                    // Same call the menu's confirm makes, with whatever selection
+                    // the menu defaults to on this machine.
                     MethodInfo begin = typeof(StartScreenController)
                         .GetMethod("BeginGame", BindingFlags.NonPublic | BindingFlags.Instance);
                     if (begin == null)
@@ -85,6 +118,30 @@ public static class KeyboardPlayShot
 
             case 2: // let gameplay actually run before the still
                 if (now - _phaseStart > 2.5)
+                {
+                    if (_mode == "final")
+                    {
+                        // Force the goal so the whole finale plays out for real
+                        // (finish text -> continue offer -> flight -> celebration)
+                        // instead of shooting a synthetic pose.
+                        var win = Object.FindAnyObjectByType<WinSequence>();
+                        if (win == null)
+                            Fail(3, "WinSequence not found in play mode");
+                        win.TryTrigger(9999f);
+                        Debug.Log("[KeyboardPlayShot] final mode: win triggered, holding "
+                                  + _shotDelay + "s before the still.");
+                        _phase = 4;
+                        _phaseStart = now;
+                        break;
+                    }
+
+                    WriteShot();
+                    _phase = 3;
+                }
+                break;
+
+            case 4: // finale playing out
+                if (now - _phaseStart > _shotDelay)
                 {
                     WriteShot();
                     _phase = 3;
@@ -106,7 +163,39 @@ public static class KeyboardPlayShot
         rt.Create();
         RenderTexture prevTarget = cam.targetTexture;
         cam.targetTexture = rt;
+
+        // Camera.Render() does NOT draw Screen Space - Overlay canvases: they are
+        // composited straight to the display, never into a camera's target. Every
+        // menu, HUD and win-recap page in this game is an overlay canvas, so a raw
+        // cam.Render() yields a picture of the road with the entire UI missing —
+        // which is exactly the kind of shot that looks fine and proves nothing.
+        // Borrow each overlay canvas into this camera for the duration of the
+        // render, then hand it straight back.
+        var borrowed = new System.Collections.Generic.List<Canvas>();
+        var savedPlaneDistance = new System.Collections.Generic.List<float>();
+        foreach (Canvas c in Object.FindObjectsByType<Canvas>(FindObjectsInactive.Exclude))
+        {
+            if (c == null || !c.isRootCanvas || c.renderMode != RenderMode.ScreenSpaceOverlay)
+                continue;
+            borrowed.Add(c);
+            savedPlaneDistance.Add(c.planeDistance);
+            c.renderMode = RenderMode.ScreenSpaceCamera;
+            c.worldCamera = cam;
+            c.planeDistance = Mathf.Max(cam.nearClipPlane + 0.1f, 1f);
+        }
+        Canvas.ForceUpdateCanvases();
+
         cam.Render();
+
+        for (int i = 0; i < borrowed.Count; i++)
+        {
+            borrowed[i].renderMode = RenderMode.ScreenSpaceOverlay;
+            borrowed[i].worldCamera = null;
+            borrowed[i].planeDistance = savedPlaneDistance[i];
+        }
+        Canvas.ForceUpdateCanvases();
+        Debug.Log("[KeyboardPlayShot] overlay canvases folded into the capture: " + borrowed.Count);
+
         cam.targetTexture = prevTarget;
 
         RenderTexture prevActive = RenderTexture.active;
