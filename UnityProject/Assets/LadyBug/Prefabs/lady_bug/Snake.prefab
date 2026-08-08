@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 4708071688153586629}
   - component: {fileID: 4774362979807709542}
   - component: {fileID: 5935919440090816317}
-  - component: {fileID: 2661720353782092942}
+  - component: {fileID: 2114036906509052290}
   m_Layer: 0
   m_Name: Snake
   m_TagString: Untagged
@@ -85,6 +85,7 @@ MonoBehaviour:
   idleWiggleSpeed: 3
   crossingWiggleAngle: 10
   crossingWiggleSpeed: 12
+  idleTurnChance: 0.35
 --- !u!65 &5935919440090816317
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -106,7 +107,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.9, y: 1, z: 0.3}
   m_Center: {x: 0, y: -0.45, z: 0}
---- !u!114 &2661720353782092942
+--- !u!114 &2114036906509052290
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -115,14 +116,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 87915271263036747}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bc4a23f0b485f4a33a870a98aea7bc9a, type: 3}
+  m_Script: {fileID: 11500000, guid: b985e06c0a1cb4a7195c919c8d7aae1e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: LadyBug.Runtime::LadyBug.SnakePose
-  walker: {fileID: 4774362979807709542}
-  spriteRenderer: {fileID: 4672608319462566363}
-  idleTexture: {fileID: 2800000, guid: 38c0a531d334748f3922449e1f404a9b, type: 3}
-  movingTexture: {fileID: 2800000, guid: 1281e1d6af5484483b1af34dfbd4f277, type: 3}
-  height: 1.9
+  m_EditorClassIdentifier: LadyBug.Runtime::LadyBug.SpriteFrameAnimator
+  targetRenderer: {fileID: 4672608319462566363}
+  frames:
+  - {fileID: 2800000, guid: c1376f3a022134414b184bbad2e602ee, type: 3}
+  - {fileID: 2800000, guid: ed95bd188855a499bafb5c789b4a0e16, type: 3}
+  - {fileID: 2800000, guid: 0a1fe6fb7a06d4c619da086ac82878ac, type: 3}
+  - {fileID: 2800000, guid: a9550a56e6b3649e2b510fe97fc32ed9, type: 3}
+  - {fileID: 2800000, guid: 54cd3f9c4ba704260b86e1d15a35b5fe, type: 3}
+  - {fileID: 2800000, guid: a09c04d096f4e4892879e896e999223a, type: 3}
+  - {fileID: 2800000, guid: 2e22b276ff99f4b15b0f05b57fefb4d0, type: 3}
+  - {fileID: 2800000, guid: 7b4eb7c6ebf254dcb8fa7db02f893b9e, type: 3}
+  - {fileID: 2800000, guid: a87e00800d418463cb32187bb47da4ae, type: 3}
+  - {fileID: 2800000, guid: e702ca4198e5a489c95d40a45707dac8, type: 3}
+  frameDuration: 0.16
+  randomOrder: 1
 --- !u!1 &5293262994890557823
 GameObject:
   m_ObjectHideFlags: 0

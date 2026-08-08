@@ -27,8 +27,8 @@ Transform:
   m_GameObject: {fileID: 1832809930797292518}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.70500004, z: 0}
-  m_LocalScale: {x: 0.5075, y: 0.01, z: 0.5075}
+  m_LocalPosition: {x: 0, y: -0.85, z: 0}
+  m_LocalScale: {x: 0.60899997, y: 0.01, z: 0.60899997}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5846473667058609761}
@@ -103,6 +103,7 @@ GameObject:
   - component: {fileID: 9050608385551881899}
   - component: {fileID: 7479929874088277542}
   - component: {fileID: 4407243387092237570}
+  - component: {fileID: 4359894288774918759}
   m_Layer: 0
   m_Name: Rabbit
   m_TagString: Untagged
@@ -119,7 +120,7 @@ Transform:
   m_GameObject: {fileID: 2229060789378034168}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.725, z: 0}
+  m_LocalPosition: {x: 0, y: 0.87, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -174,6 +175,7 @@ MonoBehaviour:
   idleWiggleSpeed: 3
   crossingWiggleAngle: 10
   crossingWiggleSpeed: 12
+  idleTurnChance: 0.35
 --- !u!65 &4407243387092237570
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -193,8 +195,34 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.725, y: 1, z: 0.3}
-  m_Center: {x: 0, y: -0.22500002, z: 0}
+  m_Size: {x: 0.87, y: 1, z: 0.3}
+  m_Center: {x: 0, y: -0.37, z: 0}
+--- !u!114 &4359894288774918759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2229060789378034168}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b985e06c0a1cb4a7195c919c8d7aae1e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LadyBug.Runtime::LadyBug.SpriteFrameAnimator
+  targetRenderer: {fileID: 5137303256870595783}
+  frames:
+  - {fileID: 2800000, guid: 63054a90082934b7fa89e8b8ad9f5c76, type: 3}
+  - {fileID: 2800000, guid: 2f21f646c9a644cd988b716d950bb855, type: 3}
+  - {fileID: 2800000, guid: 083114caf057d4b99be26a8ac5483d7d, type: 3}
+  - {fileID: 2800000, guid: 25795821d62004c2a9b20dcc1767c1df, type: 3}
+  - {fileID: 2800000, guid: c12c4cd03eb9e47adb33028d49fdedae, type: 3}
+  - {fileID: 2800000, guid: 5d404237448014c48b81c22f21cd386d, type: 3}
+  - {fileID: 2800000, guid: 43cb0bd715ee940b486ca98318a8d8d2, type: 3}
+  - {fileID: 2800000, guid: 3700c4fc4718441de988b4ef76ca0b28, type: 3}
+  - {fileID: 2800000, guid: 8eec2dc8e7f554fc8b919b7820b05e05, type: 3}
+  - {fileID: 2800000, guid: c5932824c9b17458cb0033825c340a35, type: 3}
+  frameDuration: 0.16
+  randomOrder: 1
 --- !u!1 &4973659418166304694
 GameObject:
   m_ObjectHideFlags: 0
@@ -223,7 +251,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.725, y: 1.45, z: 1}
+  m_LocalScale: {x: 0.87, y: 1.74, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5846473667058609761}

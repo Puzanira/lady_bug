@@ -103,6 +103,7 @@ GameObject:
   - component: {fileID: 5175433940065554347}
   - component: {fileID: 6605101359455327120}
   - component: {fileID: 7975893192670755081}
+  - component: {fileID: 6584263939981327760}
   m_Layer: 0
   m_Name: Cat
   m_TagString: Untagged
@@ -174,6 +175,7 @@ MonoBehaviour:
   idleWiggleSpeed: 3
   crossingWiggleAngle: 10
   crossingWiggleSpeed: 12
+  idleTurnChance: 0.35
 --- !u!65 &7975893192670755081
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -195,6 +197,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.2, y: 1.2, z: 0.3}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &6584263939981327760
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3450303084787522864}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b985e06c0a1cb4a7195c919c8d7aae1e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LadyBug.Runtime::LadyBug.SpriteFrameAnimator
+  targetRenderer: {fileID: 4904304437726271464}
+  frames:
+  - {fileID: 2800000, guid: 2b9936df1a0d74cde9d2885fbab4cba6, type: 3}
+  - {fileID: 2800000, guid: 82e24b5f48c384e2793bf860d3585732, type: 3}
+  - {fileID: 2800000, guid: 5d1cc472ba23e4e23a2b7e31a0aa0f81, type: 3}
+  - {fileID: 2800000, guid: 1781e1b4768ff491ca75593b302bf5c4, type: 3}
+  - {fileID: 2800000, guid: 99f7de534984545ee8e0e71081ef6d4c, type: 3}
+  - {fileID: 2800000, guid: 91ee05da11c4545b69ade4fff4444fa9, type: 3}
+  - {fileID: 2800000, guid: d02d784a07d504ba58c11bea45aaafd9, type: 3}
+  - {fileID: 2800000, guid: aa045d24926504aec965be630d116691, type: 3}
+  - {fileID: 2800000, guid: d45cbcb87c14344d69669069d0f75ee1, type: 3}
+  - {fileID: 2800000, guid: 95ed9e29df37c4acf970ef44bb4fce0f, type: 3}
+  frameDuration: 0.16
+  randomOrder: 1
 --- !u!1 &6525662279032297629
 GameObject:
   m_ObjectHideFlags: 0

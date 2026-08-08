@@ -35,10 +35,34 @@
 | `StartScreenMusic.mp3` | 506 | Little Bells | из доков |
 | `MenuMusic_PopTrack03.mp3` | 729 | — | из доков |
 | `MenuMusic_BanjoMan.mp3` | 822 | — | из доков |
+| `WinApplause.wav` | **513** | Applause ambience loop | скачано под эту задачу |
 
 Прямые ссылки: `https://assets.mixkit.co/active_storage/sfx/<id>/<id>-preview.mp3`
 
 14-й файл — `GearShift.wav`, он **не с mixkit**, см. ниже.
+
+### Звуки заполнения экранов загрузчика — `Assets/Audio/loader/`
+
+Тоже mixkit, та же лицензия. По одному на игровой слот автомата (какой слот
+что — см. `SceneSetup.GameIntroThemes`):
+
+| Файл | Mixkit id | Название | Слот |
+|---|---|---|---|
+| `IntroClock.wav` | 1063 | Fast wall clock ticking | 2 — Викторина про жизнь |
+| `IntroIndianFlute.wav` | 2312 | Possitive indian flute [sic] | 3 — Медитация в спешке |
+| `IntroStones.wav` | 388 | Falling bricks | 4 — Бесконечный Сизиф |
+| `IntroFactoryHum.wav` | **828** | Loud construction machine | 5 — Завод |
+| `IntroSpaceDrone.wav` | 2510 | Cinematic suspense ambience | 6 — Таблетка в космосе |
+
+Слот 1 (БК) использует `Buzz.wav`, слот 7 (Игра про кота) — уже имеющийся
+`BadCat.mp3`; новых файлов под них не заводилось.
+
+**Все пять переработаны в бесшовные петли** (исходники — превью с mixkit):
+срезана тишина по краям, хвост подмешан в начало кроссфейдом, результат
+сохранён в **WAV, а не MP3** — MP3 добавляет собственный отступ от кодека,
+слышимый как заминка на каждом обороте. У `IntroClock` длина подобрана кратно
+интервалу тиков (0.294 с), чтобы ритм не сбивался на стыке. `IntroSpaceDrone`
+вырезан из плотного участка 12–20 с и нормализован — исходник тихий.
 
 ### ✅ `GearShift.wav` — не сторонний файл, синтезирован с нуля
 

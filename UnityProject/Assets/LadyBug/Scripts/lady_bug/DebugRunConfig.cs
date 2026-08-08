@@ -8,6 +8,20 @@ public static class DebugRunConfig
 {
     public const bool EmptyRoad = false;
 
+    // Debug: when non-empty, this is the ONLY thing that appears on or beside
+    // the road — every other pickup and obstacle is dropped from the spawner
+    // pools, and the big arch, roadside scenery, shoulder decor, clouds and
+    // birds are not built at all. For studying one object's animation without
+    // waiting for it to come round in the rotation or picking it out of a busy
+    // screen. The road, ground, shoulder and sky backdrop stay, otherwise there
+    // is nothing to judge the motion against.
+    //
+    // Set to "" for a normal run. Applied at scene-build time, so changing it
+    // needs Tools -> Rebuild Scene.
+    public const string OnlyEntity = "";
+
+    public static bool IsolatingSingleEntity => !string.IsNullOrEmpty(OnlyEntity);
+
     public static float RoadHalfWidth
     {
         get

@@ -283,13 +283,22 @@ public class StartScreenController : MonoBehaviour
         UpdateVisuals();
         UpdateCarousel();
 
-        // Loader/intro (LoaderScreenController, IntroSequence) are skipped
-        // for now (see SceneSetup's own comment on why) — nothing else is
-        // ever going to call PlayMusic()/OnRevealed() for us, so this menu
-        // has to do it itself, immediately, instead of waiting on a reveal
-        // event from a screen that no longer runs.
-        PlayMusic();
-        OnRevealed();
+        // Normally IntroSequence.Finish() uncovers this menu and calls
+        // OnRevealed() (plus PlayMusic() for slot 0). But the loader/intro
+        // pair can be switched off in SceneSetup for quicker test runs, and
+        // then nobody would ever make those calls — the menu would sit
+        // revealed, silent, on whatever carousel page happened to be up.
+        //
+        // So: only self-start when no IntroSequence exists to do it for us.
+        // Inactive ones count — the intro canvases are built deactivated and
+        // only wake up once a game control is held, so a search that skipped
+        // inactive objects would find nothing and start the music underneath
+        // the loader.
+        if (FindObjectsByType<IntroSequence>(FindObjectsInactive.Include).Length == 0)
+        {
+            PlayMusic();
+            OnRevealed();
+        }
     }
 
     // Called by IntroSequence once the flower-fill/countdown screen

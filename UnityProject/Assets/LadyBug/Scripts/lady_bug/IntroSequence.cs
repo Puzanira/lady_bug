@@ -8,10 +8,9 @@ namespace LadyBug
 // Shown after the player holds down a control on LoaderScreenController's
 // attract-mode screen: flowers rain down and pile up (bottom row first, see
 // SceneSetup.CreateIntroScreen for the fill order) until the whole screen
-// is covered — held for a beat, then a 5-4-3-2-1-СТАРТ countdown appears
-// right on top of the finished flower pile — then this canvas fades itself
-// out and hands off to the start menu, which has been sitting ready
-// underneath the whole time. Doesn't start on its own (see BeginConfirmHold)
+// is covered — then the buzz fades to silence, the picture goes to black, and
+// the start menu (which has been sitting ready underneath the whole time)
+// takes over behind the black. Doesn't start on its own (see BeginConfirmHold)
 // — LoaderScreenController triggers it once a control is held, and can
 // abort it partway through (AbortIfIncomplete) if released too early.
 public class IntroSequence : MonoBehaviour
@@ -23,15 +22,14 @@ public class IntroSequence : MonoBehaviour
     // "release happened mid-sequence" cases apart.
     public bool IsRunning { get; private set; }
     // True only while the grid is still filling with falling objects — goes
-    // false the instant the 5-4-3-2-1 countdown starts (see RunCountdown).
-    // LoaderScreenController only needs the control held for as long as
-    // this is true; once the countdown itself is showing, releasing early
-    // no longer aborts anything — per feedback, that's already "committed".
+    // false the moment the screen is covered and the handoff beats start.
+    // LoaderScreenController only needs the control held for as long as this
+    // is true; once the screen is full, releasing early no longer aborts
+    // anything — per feedback, that's already "committed".
     public bool CanStillAbort { get; private set; }
-    // Fades the whole canvas out at the very end (see FadeOutAndFinish) —
-    // a soft finish instead of canvasRoot just vanishing on the spot.
+    // Only used to restore full opacity on abort now — the ending itself
+    // darkens via darkenOverlay rather than fading this canvas out.
     [SerializeField] private CanvasGroup canvasGroup;
-    [SerializeField] private float finishFadeOutDuration = 0.6f;
     // One per grid cell, already in fill order (bottom row to top row,
     // shuffled within each row) — built at scene-setup time.
     [SerializeField] private RectTransform[] flowers;
@@ -44,68 +42,29 @@ public class IntroSequence : MonoBehaviour
     [SerializeField] private AudioSource buzzSource;
     [SerializeField] private float buzzMaxVolume = 0.6f;
 
-    // Once the grid is fully covered: the buzz fades to silence over this
-    // beat (no more darken-then-reveal-a-wall step — the countdown below
-    // now appears directly over the finished flower pile instead, per
-    // feedback that the wall background should go), then a short further
-    // pause (digitDelay) before the countdown itself starts.
-    [SerializeField] private float darkenDuration = 1.2f;
-    [SerializeField] private float digitDelay = 0.4f;
+    // Once the grid is fully covered the screen hands off to the game, in two
+    // equal beats: the buzz winds down to silence, then the picture goes to
+    // black. There used to be a 5-4-3-2-1-СТАРТ graffiti countdown between
+    // those two — removed per feedback, along with its pulse/shake animation
+    // and the per-digit gear-shift sound.
+    [SerializeField] private float audioFadeOutDuration = 2f;
+    [SerializeField] private float darkenDuration = 2f;
 
-    // Big countdown — 5-4-3-2-1, then "СТАРТ", held a moment (with a
-    // pulse/shake, see PulseStart), before revealing the start menu. Real
-    // generated graffiti artwork (asset_gen/gen_asset.sh), one transparent
-    // texture per step (drawn right over the flowers, no wall behind it
-    // anymore), swapped on this one RawImage — countdownTextures[0..4] are
-    // 5/4/3/2/1, [5] is "СТАРТ".
-    [SerializeField] private RawImage countdownImage;
-    [SerializeField] private Texture2D[] countdownTextures;
-    [SerializeField] private float countdownStepDuration = 0.8f;
-
-    // "СТАРТ" pulse — exactly pulseCount beats over startHoldDuration
-    // (0.2s/beat at the defaults) rather than a fixed angular speed, so the
-    // count stays exactly right regardless of how long the hold is tuned to.
-    [SerializeField] private float startHoldDuration = 2.2f;
-    [SerializeField] private int startPulseCount = 11; // however many 0.2s beats fit in startHoldDuration
-    [SerializeField] private float startPulseAmount = 0.08f;
-    [SerializeField] private float startShakeAmount = 8f;
-
-    // Dead-still beat between the continuous wave above and the short
-    // accents below — lets the continuous pulsing actually read as
-    // "finished" before the next phase starts, instead of blurring
-    // straight into it.
-    [SerializeField] private float startPulseRestPause = 2.2f;
-
-    // Third beat: a few short, sharp individual pulses with real stillness
-    // between them (not another continuous wave) — a distinct "last call"
-    // punctuation before handing off to the menu, not just more of the same.
-    // Total time is 0.4s longer than the plain 8*0.4s baseline now (two
-    // rounds of +0.2s), all of it added as extra pause per beat (0.05s
-    // each) — same shortPulseCount, same shortPulseDuration, just more
-    // stillness between beats.
-    [SerializeField] private int shortPulseCount = 8;
-    [SerializeField] private float shortPulseDuration = 0.1f;
-    [SerializeField] private float shortPulsePause = 0.35f;
-    [SerializeField] private float shortPulseAmount = 0.08f;
-
-    // Fourth beat: a final still hold once the short accents finish, before
-    // the countdown image hides and hands off to the menu underneath —
-    // lets the last accent actually land instead of cutting the instant it ends.
-    [SerializeField] private float finalHoldPause = 0.5f;
-
-    // Gear-shift clip, once per digit (not for "СТАРТ" itself — that's not
-    // a digit) — same sound SpeedController's own gear changes use.
-    [SerializeField] private AudioSource shiftSource;
+    // Full-screen black square on top of everything on this canvas, kept at
+    // alpha 0 until the darken beat. Fading THIS in (rather than fading the
+    // canvas out, which is what the old countdown ending did) is what makes
+    // the handoff read as "lights out" instead of "the intro dissolves and
+    // you watch the menu appear".
+    [SerializeField] private Image darkenOverlay;
 
     // Wired for all 7 of the loader's game slots (not just БК) — Finish()
     // always calls startScreen.OnRevealed() so the menu's own carousel
     // resets to page 0 right as it becomes visible, regardless of which
     // slot's intro just finished (see OnRevealed's own comment). Only
-    // isPrimaryGame's instance also calls PlayMusic(), in RunCountdown, the
-    // instant "СТАРТ" appears — StartScreenController itself no longer
-    // starts its music in Awake, since this whole screen sits on top of the
-    // menu for the first several seconds and that music would otherwise
-    // already be playing underneath a screen meant to be silent.
+    // isPrimaryGame's instance also calls PlayMusic(), and it now does so in
+    // Finish() — i.e. at the moment the game screen actually appears. It used
+    // to fire the instant the "СТАРТ" graffiti showed, several seconds
+    // earlier, so the music played under a screen that was still the intro.
     [SerializeField] private StartScreenController startScreen;
     // True only for БК's own instance (index 0 in SceneSetup's
     // GameIntroThemes) — gates the PlayMusic() call specifically; games 2-7
@@ -123,8 +82,7 @@ public class IntroSequence : MonoBehaviour
 
     private void Awake()
     {
-        if (countdownImage != null)
-            countdownImage.gameObject.SetActive(false);
+        SetOverlayAlpha(0f);
 
         if (flowers == null)
             return;
@@ -140,7 +98,7 @@ public class IntroSequence : MonoBehaviour
     }
 
     // Called by LoaderScreenController when a control is first pressed —
-    // reveals this canvas and starts the flower/countdown sequence.
+    // reveals this canvas and starts the fill-then-handoff sequence.
     public void BeginConfirmHold()
     {
         IsRunning = true;
@@ -151,7 +109,7 @@ public class IntroSequence : MonoBehaviour
     }
 
     // Called by LoaderScreenController when the held control is released
-    // before the sequence reached "СТАРТ" — snaps everything back to its
+    // before the screen finished filling — snaps everything back to its
     // pre-run state and hides this canvas again instead of letting the
     // coroutine keep playing out. A no-op if the sequence already finished
     // naturally (IsRunning is false by then), so a release right at the end
@@ -170,8 +128,7 @@ public class IntroSequence : MonoBehaviour
             buzzSource.Stop();
             buzzSource.volume = 0f;
         }
-        if (countdownImage != null)
-            countdownImage.gameObject.SetActive(false);
+        SetOverlayAlpha(0f);
         if (canvasGroup != null)
             canvasGroup.alpha = 1f;
         if (flowers != null)
@@ -208,29 +165,29 @@ public class IntroSequence : MonoBehaviour
             yield return new WaitForSeconds(perFlowerDelay);
         }
 
-        // Let the last handful still mid-fall actually land before revealing
-        // the menu underneath, instead of cutting them off mid-air.
+        // Let the last handful still mid-fall actually land before the screen
+        // is treated as full, instead of cutting them off mid-air.
         yield return new WaitForSeconds(fallDuration);
 
-        yield return StartCoroutine(FadeOutBuzz());
+        // Screen is covered — from here the start is committed and letting go
+        // of the control no longer aborts anything.
+        CanStillAbort = false;
 
-        yield return new WaitForSeconds(digitDelay);
-        yield return StartCoroutine(RunCountdown());
-        yield return StartCoroutine(FadeOutAndFinish());
+        yield return StartCoroutine(FadeOutBuzz());
+        yield return StartCoroutine(DarkenToBlackAndFinish());
     }
 
-    // Just the buzz winding down to silence over darkenDuration — used to
-    // also darken the screen to black and reveal a graffiti wall behind the
-    // countdown here; removed per feedback (the countdown sits directly
-    // over the finished flower pile now, no separate background swap).
+    // First handoff beat: the buzz winds down to silence. Runs before the
+    // darken rather than alongside it, so the screen is already quiet by the
+    // time the lights start going out.
     private IEnumerator FadeOutBuzz()
     {
         float startBuzzVolume = buzzSource != null ? buzzSource.volume : 0f;
         float t = 0f;
-        while (t < darkenDuration)
+        while (t < audioFadeOutDuration)
         {
             t += Time.deltaTime;
-            float p = Mathf.Clamp01(t / darkenDuration);
+            float p = Mathf.Clamp01(t / audioFadeOutDuration);
             if (buzzSource != null)
                 buzzSource.volume = Mathf.Lerp(startBuzzVolume, 0f, p);
             yield return null;
@@ -239,114 +196,39 @@ public class IntroSequence : MonoBehaviour
             buzzSource.Stop();
     }
 
-    // Replaces the old instant Finish() call — the whole screen (flowers +
-    // countdown, whatever's still showing) eases out to transparent instead
-    // of just vanishing on the spot, then hides for good.
-    private IEnumerator FadeOutAndFinish()
+    private void SetOverlayAlpha(float a)
     {
-        // Resets the carousel to page 0 before the fade starts, not just in
-        // Finish() at the end — this canvas sits ABOVE the start menu and
-        // fades to transparent over finishFadeOutDuration, so the menu (and
-        // whatever carousel page it silently landed on while hidden) is
-        // visible, blending in, for that whole fade — not just for one
-        // stray frame at the very end. Finish()'s own call to this is now
-        // mostly a no-op for this path, but still needed for the
-        // no-flowers fallback in RunIntro(), which skips straight to
-        // Finish() without ever fading.
-        if (startScreen != null)
-            startScreen.OnRevealed();
+        if (darkenOverlay == null)
+            return;
 
-        if (canvasGroup != null)
+        Color c = darkenOverlay.color;
+        darkenOverlay.color = new Color(c.r, c.g, c.b, a);
+    }
+
+    // Second handoff beat: the finished pile goes to black, then the game
+    // screen takes over behind it.
+    //
+    // Deliberately NOT the old approach of fading this canvas out to
+    // transparent: that revealed the menu gradually THROUGH the intro, which
+    // is the opposite of what "затемнить экран и переключить" asks for. Here
+    // the swap happens while the screen is fully black, so it is not seen at
+    // all.
+    private IEnumerator DarkenToBlackAndFinish()
+    {
+        float t = 0f;
+        while (t < darkenDuration)
         {
-            float t = 0f;
-            while (t < finishFadeOutDuration)
-            {
-                t += Time.deltaTime;
-                canvasGroup.alpha = 1f - Mathf.Clamp01(t / finishFadeOutDuration);
-                yield return null;
-            }
-            canvasGroup.alpha = 0f;
+            t += Time.deltaTime;
+            SetOverlayAlpha(Mathf.Clamp01(t / darkenDuration));
+            yield return null;
         }
+        SetOverlayAlpha(1f);
+
         Finish();
     }
 
-    private IEnumerator RunCountdown()
-    {
-        // From here on, holding the control is no longer required — see
-        // CanStillAbort's own comment.
-        CanStillAbort = false;
 
-        if (countdownImage == null || countdownTextures == null || countdownTextures.Length < 6)
-            yield break;
 
-        countdownImage.gameObject.SetActive(true);
-        for (int n = 5; n >= 1; n--)
-        {
-            countdownImage.texture = countdownTextures[5 - n]; // [0]=5, [1]=4, ... [4]=1
-            if (shiftSource != null)
-                shiftSource.Play();
-            yield return new WaitForSeconds(countdownStepDuration);
-        }
-
-        countdownImage.texture = countdownTextures[5]; // "СТАРТ"
-        if (startScreen != null && isPrimaryGame)
-            startScreen.PlayMusic();
-        yield return StartCoroutine(PulseStart());
-        yield return new WaitForSeconds(startPulseRestPause);
-        yield return StartCoroutine(PulseStartShort());
-        yield return new WaitForSeconds(finalHoldPause);
-        countdownImage.gameObject.SetActive(false);
-    }
-
-    // Scale pulse + small jittery shake for the "СТАРТ" hold, exactly
-    // startPulseCount beats over startHoldDuration — a plain static line
-    // read as flat compared to the rest of this sequence.
-    private IEnumerator PulseStart()
-    {
-        RectTransform rt = countdownImage.rectTransform;
-        Vector3 baseScale = rt.localScale;
-        Vector2 basePos = rt.anchoredPosition;
-
-        float t = 0f;
-        while (t < startHoldDuration)
-        {
-            t += Time.deltaTime;
-            float phase = (t / startHoldDuration) * startPulseCount * Mathf.PI * 2f;
-            float pulse = Mathf.Sin(phase) * startPulseAmount;
-            rt.localScale = baseScale * (1f + pulse);
-            float shakeX = (Mathf.PerlinNoise(t * 25f, 0f) - 0.5f) * 2f * startShakeAmount;
-            float shakeY = (Mathf.PerlinNoise(0f, t * 25f) - 0.5f) * 2f * startShakeAmount;
-            rt.anchoredPosition = basePos + new Vector2(shakeX, shakeY);
-            yield return null;
-        }
-
-        rt.localScale = baseScale;
-        rt.anchoredPosition = basePos;
-    }
-
-    // shortPulseCount individual quick pulses, each with real stillness
-    // (shortPulsePause) between them — punctuation after PulseStart's
-    // continuous wave, not more of it.
-    private IEnumerator PulseStartShort()
-    {
-        RectTransform rt = countdownImage.rectTransform;
-        Vector3 baseScale = rt.localScale;
-
-        for (int i = 0; i < shortPulseCount; i++)
-        {
-            float t = 0f;
-            while (t < shortPulseDuration)
-            {
-                t += Time.deltaTime;
-                float p = Mathf.Clamp01(t / shortPulseDuration);
-                float pulse = Mathf.Sin(p * Mathf.PI) * shortPulseAmount; // one bump: 0 -> peak -> 0
-                rt.localScale = baseScale * (1f + pulse);
-                yield return null;
-            }
-            rt.localScale = baseScale;
-            yield return new WaitForSeconds(shortPulsePause);
-        }
-    }
 
     private IEnumerator DropFlower(RectTransform flower, Vector2 target)
     {
@@ -367,11 +249,27 @@ public class IntroSequence : MonoBehaviour
     private void Finish()
     {
         IsRunning = false;
-        CanStillAbort = false; // usually already false by the time RunCountdown gets here, but RunIntro's empty-flowers fallback skips straight to this
+        CanStillAbort = false; // normally already false by now — RunIntro clears it once the screen is full; this covers its empty-flowers fallback, which jumps straight here
+
+        // Hide this canvas FIRST, so the frame the menu becomes visible is
+        // also the frame the black overlay stops covering it — the swap
+        // itself happened while the screen was fully black.
         if (canvasRoot != null)
             canvasRoot.SetActive(false);
-        if (startScreen != null)
-            startScreen.OnRevealed();
+
+        // Reset the overlay for a future run: this canvas is reactivated by
+        // BeginConfirmHold, and a second run would otherwise open on black.
+        SetOverlayAlpha(0f);
+
+        if (startScreen == null)
+            return;
+
+        startScreen.OnRevealed();
+
+        // Music starts here — with the game screen — rather than back when the
+        // "СТАРТ" graffiti used to appear.
+        if (isPrimaryGame)
+            startScreen.PlayMusic();
     }
 }
 }

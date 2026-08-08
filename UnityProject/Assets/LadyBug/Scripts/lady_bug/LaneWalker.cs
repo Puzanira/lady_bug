@@ -26,15 +26,21 @@ public class LaneWalker : MonoBehaviour
     [SerializeField] private float idleWiggleSpeed = 3f;
     [SerializeField] private float crossingWiggleAngle = 10f;
     [SerializeField] private float crossingWiggleSpeed = 12f;
+    // Chance to turn around instead of standing still when a move is blocked
+    // by the edge of the road — see TryStartMove.
+    [SerializeField] [Range(0f, 1f)] private float idleTurnChance = 0.35f;
 
     private int _lane;
     private float _timer;
     private bool _moving;
     private Transform _sprite;
     private float _baseSpriteScaleX;
+    private bool _hasFrameAnimation;
 
     // Whether this creature is actively crossing into a neighbouring lane
-    // right now — read by SnakePose to pick between its idle/moving sprite.
+    // right now. Used to pick the faster of the two placeholder wiggles; the
+    // snake also used to read it to swap between a reared and a slithering
+    // sprite, before it moved onto the shared frame animation like everyone else.
     public bool IsMoving => _moving;
 
     public void ConfigureLanes(int count, int? snapLane = null)
@@ -70,14 +76,33 @@ public class LaneWalker : MonoBehaviour
         // TryStartMove) keeps the head leading instead of these creatures
         // sometimes walking backward into a lane.
         _baseSpriteScaleX = Mathf.Abs(_sprite.localScale.x);
+        _hasFrameAnimation = GetComponentInChildren<SpriteFrameAnimator>() != null;
+
+        // Facing was only ever set when a move began, so anything that had not
+        // moved yet faced whichever way its source art happened to point —
+        // every dog on the road looking the same way until it first crossed a
+        // lane. Start each one facing at random instead.
+        SetFacing(Random.value < 0.5f ? -1 : 1);
+    }
+
+    private void SetFacing(int direction)
+    {
+        _sprite.localScale = new Vector3(
+            _baseSpriteScaleX * direction, _sprite.localScale.y, _sprite.localScale.z);
     }
 
     private void Update()
     {
-        float wiggleAngle = _moving
-            ? Mathf.Sin(Time.time * crossingWiggleSpeed) * crossingWiggleAngle
-            : Mathf.Sin(Time.time * idleWiggleSpeed) * idleWiggleAngle;
-        _sprite.localRotation = Quaternion.Euler(0f, 0f, wiggleAngle);
+        // The wiggle is a stand-in for animation. Anything with real frames
+        // (SpriteFrameAnimator) animates itself, and rocking it as well just
+        // makes it look like it is sliding on ice.
+        if (!_hasFrameAnimation)
+        {
+            float wiggleAngle = _moving
+                ? Mathf.Sin(Time.time * crossingWiggleSpeed) * crossingWiggleAngle
+                : Mathf.Sin(Time.time * idleWiggleSpeed) * idleWiggleAngle;
+            _sprite.localRotation = Quaternion.Euler(0f, 0f, wiggleAngle);
+        }
 
         if (!_moving)
         {
@@ -105,13 +130,19 @@ public class LaneWalker : MonoBehaviour
         int targetLane = _lane + direction;
         if (targetLane < 0 || targetLane >= laneCount)
         {
-            ScheduleNext(); // already at that edge lane — try again later
+            // Nowhere to go that way — it is already in the edge lane. Rather
+            // than stand frozen facing the same way for another whole wait,
+            // sometimes just turn on the spot, as if it looked that way and
+            // thought better of it.
+            if (Random.value < idleTurnChance)
+                SetFacing(direction);
+            ScheduleNext();
             return;
         }
 
         _lane = targetLane;
         _moving = true;
-        _sprite.localScale = new Vector3(_baseSpriteScaleX * direction, _sprite.localScale.y, _sprite.localScale.z);
+        SetFacing(direction);
     }
 
     private void ScheduleNext()

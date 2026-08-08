@@ -110,10 +110,21 @@ public static class SceneSetup
         CreateRoad();
         CreateSideGround();
         CreateRoadShoulder();
-        CreateShoulderDecor();
+        // DebugRunConfig.OnlyEntity isolates one object for inspection. Its
+        // pool filtering inside CreateSpawner only reaches the road entities,
+        // so everything that has its OWN spawner has to be skipped here:
+        // the big arch, the roadside scenery, the shoulder decor, and (inside
+        // CreateSky) the clouds and birds. The road, ground, shoulder and sky
+        // backdrop stay — with those gone there is no sense of motion left to
+        // judge the animation against.
+        if (!DebugRunConfig.IsolatingSingleEntity)
+            CreateShoulderDecor();
         CreateSpawner();
-        CreateBigArchSpawner();
-        CreateSideScenery();
+        if (!DebugRunConfig.IsolatingSingleEntity)
+        {
+            CreateBigArchSpawner();
+            CreateSideScenery();
+        }
         CreateSky();
         CreateAudio();
         CreateHelpScreen();
@@ -124,32 +135,21 @@ public static class SceneSetup
         CreateStartScreen(playerRight, playerLeft, gestureCanvasLeft, gestureCanvasRight);
         CreatePauseDialog();
         CreateExitGesture();
-        // Loader (attract-mode controller-select) + flower-fill/countdown intro are
-        // NOT built into the scene. The author had already commented these two out as
-        // a dev-time convenience; for the arcade cabinet the cut is permanent and
-        // deliberate, so it is a named switch rather than a commented-out line:
-        // the attract screen and the hold-to-launch flower animation now live in the
-        // shared arcade-hub launcher, which plays them for EVERY one of the 7 games
-        // while its control is held (arcade-hub's HoldToLaunchController was adapted
-        // from IntroSequence). A game that also played its own would show the same
-        // animation twice in a row. Founder decision, 2026-07.
+        // Loader (attract-mode, hold one of the 7 game controls) + the
+        // flower-fill/countdown intro for whichever slot was held. Both were
+        // temporarily skipped so test runs booted straight into the menu; back
+        // on now, which is what the real cabinet needs.
         //
-        // CreateLoaderScreen/CreateAllIntroScreens and the LoaderScreenController /
-        // IntroSequence scripts are left fully intact below, unreferenced, so this
-        // stays a reversible cut of the author's work: flip the const to build the
-        // standalone attract flow back into the scene.
-        // StartScreenCanvas sits ready underneath regardless (see IntroSequence's own
-        // class comment), so skipping these just means nothing ever covers it — see
-        // StartScreenController.Awake's own PlayMusic()/OnRevealed() calls, which
-        // replaced what IntroSequence.Finish() used to trigger.
-        const bool includeAttractAndIntroScreens = false;
-#pragma warning disable CS0162 // unreachable by design — see the comment above
-        if (includeAttractAndIntroScreens)
-        {
-            IntroSequence[] gameIntros = CreateAllIntroScreens();
-            CreateLoaderScreen(gameIntros);
-        }
-#pragma warning restore CS0162
+        // StartScreenCanvas sits ready underneath these the whole time (see
+        // IntroSequence's class comment) and is uncovered by
+        // IntroSequence.Finish(), which is also what calls the menu's
+        // OnRevealed() and — for slot 0 only — PlayMusic(). While these were
+        // skipped, StartScreenController.Awake did both itself; it now checks
+        // for an IntroSequence in the scene and stands down when one exists,
+        // so re-enabling here does not start the menu music underneath the
+        // loader.
+        IntroSequence[] gameIntros = CreateAllIntroScreens();
+        CreateLoaderScreen(gameIntros);
         CreateScreenInfoLabel();
 
         // After every generator has run, so the set of live textures is final.
@@ -287,7 +287,7 @@ public static class SceneSetup
         messageGo.transform.SetParent(canvasGo.transform, false);
         Text message = messageGo.AddComponent<Text>();
         message.font = GameFont;
-        message.fontSize = 56;
+        message.fontSize = 40; // до 5 строк (заголовок + 4 категории) вместо прежних двух
         message.fontStyle = FontStyle.Bold;
         message.alignment = TextAnchor.MiddleCenter;
         message.color = new Color(1f, 0.85f, 0.2f);
@@ -303,7 +303,17 @@ public static class SceneSetup
         // almost no real gap before SmileText below it. Moved up rather
         // than pushing SmileText down, so as not to crowd CameraPreview's
         // own top edge underneath it any further than before.
-        messageRt.sizeDelta = new Vector2(1400f, 170f);
+        // Раньше сюда влезали ровно 2 строки. Теперь показываются ВСЕ
+        // категории, где забег попал в топ (WinSequence.CaptureRecordPhoto),
+        // то есть до 5 строк — бокс выше, шрифт мельче, и обязательно Overflow:
+        // при Truncate строка, не влезшая в бокс, не обрезается, а выбрасывается
+        // целиком (те же грабли, что у стрелок джойстика).
+        message.horizontalOverflow = HorizontalWrapMode.Wrap;
+        message.verticalOverflow = VerticalWrapMode.Overflow;
+        messageRt.sizeDelta = new Vector2(1400f, 230f);
+        // Центр там же, где был. Коробка занимает 275..505: сверху остаётся
+        // 35px до края канваса (540), снизу 35px до верхнего края
+        // CameraPreview (240) — растить дальше некуда ни в одну сторону.
         messageRt.anchoredPosition = new Vector2(0f, 390f);
 
         var previewGo = new GameObject("CameraPreview");
@@ -930,8 +940,9 @@ public static class SceneSetup
         ("Motorcycle", "Motorcycle.png", 1.6f, -1),
         ("Dog", "Dog.png", 1.5f, -1),
         ("Cat", "Cat.png", 1.2f, -1),
-        ("Rabbit", "Rabbit.png", 1.45f, -1),
+        ("Rabbit", "Rabbit.png", 1.74f, -1), // +20% — читался мелким рядом с остальными зверями; коллайдер не тронут (см. LaneObjectColliderHeightOverrides)
         ("Crow", "Crow.png", 1.1f, -1),
+        ("Snake", "Snake.png", 1.9f, -1),
         ("SandPile", "SandPile.png", 1.3f, -1),
         ("BrickPile", "BrickPile.png", 1.3f, -1),
         ("WoodPile", "WoodPile.png", 1.2f, -1),
@@ -939,7 +950,7 @@ public static class SceneSetup
     };
 
     // Living creatures among LaneObjects that drift sideways between lanes (LaneWalker).
-    static readonly string[] WanderingAnimals = { "Dog", "Cat", "Crow", "Rabbit" };
+    static readonly string[] WanderingAnimals = { "Dog", "Cat", "Crow", "Rabbit", "Snake" };
 
     // Piles are meant to block the whole lane, not just sit in a corner of
     // it — stretched wider than their (roughly square) art would give on
@@ -970,6 +981,7 @@ public static class SceneSetup
         { "Motorcycle", 1.0f },
         { "Dog", 1.0f },
         { "Rabbit", 1.0f },
+        { "Snake", 1.0f }, // высокая стойка кобры выше прыжка (1.4) — бокс только по телу у земли
     };
 
     // (name, texture file, roadside height)
@@ -1022,14 +1034,48 @@ public static class SceneSetup
                 badJumpPrefabs.Add(decal);
         }
 
-        GameObject snake = CreateSnakePrefab();
-        if (snake != null)
-            badJumpPrefabs.Add(snake);
 
         var badDuckPrefabs = new System.Collections.Generic.List<GameObject>();
         GameObject arch = CreateArchPrefab();
         if (arch != null)
             badDuckPrefabs.Add(arch);
+
+        // Debug: keep only the one prefab under inspection, in whichever pool
+        // it belongs to, and empty the rest. EntitySpawner picks good-vs-bad
+        // first and then a prefab from that pool, so leaving the other pools
+        // populated would still let everything else through.
+        if (!string.IsNullOrEmpty(DebugRunConfig.OnlyEntity))
+        {
+            bool Keep(GameObject p) => p != null && p.name == DebugRunConfig.OnlyEntity;
+            int Found(System.Collections.Generic.List<GameObject> list)
+            {
+                int n = 0;
+                foreach (GameObject p in list)
+                    if (Keep(p)) n++;
+                return n;
+            }
+            int found = Found(goodPrefabs) + Found(badJumpPrefabs) + Found(badDuckPrefabs);
+            if (found == 0)
+                Debug.LogWarning($"DebugRunConfig.OnlyEntity = \"{DebugRunConfig.OnlyEntity}\" matches no prefab — the road will be empty.");
+
+            GameObject only = null;
+            foreach (var list in new[] { goodPrefabs, badJumpPrefabs, badDuckPrefabs })
+                foreach (GameObject p in list)
+                    if (Keep(p)) only = p;
+
+            // Put it in ALL THREE pools, not just its own. EntitySpawner picks
+            // good-vs-bad first and only then a prefab, so leaving the other
+            // pools empty means every tick that rolled the empty side spawns
+            // nothing — at goodChance 0.5 that halves the rate, and before the
+            // game starts PickPrefab only ever reads goodPrefabs, so a bad
+            // object would never show on the start screen at all.
+            goodPrefabs.Clear(); badJumpPrefabs.Clear(); badDuckPrefabs.Clear();
+            if (only != null)
+            {
+                goodPrefabs.Add(only); badJumpPrefabs.Add(only); badDuckPrefabs.Add(only);
+            }
+            Debug.LogWarning($"DebugRunConfig.OnlyEntity is set to \"{DebugRunConfig.OnlyEntity}\" — the road spawns nothing else, and the scenery, shoulder decor, clouds and birds are skipped. Clear it for a normal run.");
+        }
 
         var spawnerGo = new GameObject("Spawner");
         EntitySpawner spawner = spawnerGo.AddComponent<EntitySpawner>();
@@ -1101,6 +1147,12 @@ public static class SceneSetup
         System.IO.Directory.CreateDirectory("Assets/LadyBug/Prefabs/lady_bug");
 
         CreateSkyBackground();
+
+        // Backdrop only while isolating one object — drifting clouds and
+        // passing birds are exactly the moving clutter that makes it hard to
+        // watch a single animation (see DebugRunConfig.OnlyEntity).
+        if (DebugRunConfig.IsolatingSingleEntity)
+            return;
 
         var prefabs = new System.Collections.Generic.List<GameObject>();
         foreach (var (name, file, height) in CloudSprites)
@@ -1354,82 +1406,6 @@ public static class SceneSetup
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    // The snake — a wandering bad object like Dog/Cat/Crow/Rabbit (LaneWalker
-    // drives its side-to-side lane changes), but with an actual pose swap
-    // instead of just a wiggle: reared up like a cobra while idle, a
-    // zigzagging slither while crossing lanes (SnakePose reads
-    // LaneWalker.IsMoving). Bespoke instead of going through
-    // CreateEntityPrefab since it needs two textures wired to a component,
-    // not one texture into a plain material.
-    static GameObject CreateSnakePrefab()
-    {
-        Texture2D idleTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/SnakeCobra.png");
-        Texture2D movingTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/SnakeSlither.png");
-        if (idleTex == null || movingTex == null)
-        {
-            Debug.LogWarning("Snake textures not found in Assets/LadyBug/Sprites/");
-            return null;
-        }
-
-        const string name = "Snake";
-        const float height = 1.9f;
-
-        var root = new GameObject(name);
-        root.transform.position = new Vector3(0f, height / 2f, 0f);
-        root.AddComponent<MovingEntity>();
-        root.AddComponent<ScoreValue>().value = -1;
-
-        LaneWalker walker = root.AddComponent<LaneWalker>();
-        SerializedObject walkerSo = new SerializedObject(walker);
-        walkerSo.FindProperty("laneWidth").floatValue = LaneWidth;
-        walkerSo.FindProperty("laneCount").intValue = LaneCount;
-        walkerSo.ApplyModifiedPropertiesWithoutUndo();
-
-        float aspect = (float)idleTex.width / idleTex.height;
-
-        // Full sprite height includes the raised cobra head, well above what
-        // a jump (jumpHeightDelta 1.4) can clear — trigger box only covers
-        // the coiled body at ground level, same fix as Bicycle/Motorcycle.
-        const float colliderHeight = 1.0f;
-        BoxCollider box = root.AddComponent<BoxCollider>();
-        box.isTrigger = true;
-        box.size = new Vector3(height * aspect, colliderHeight, 0.3f);
-        box.center = new Vector3(0f, -(height - colliderHeight) / 2f, 0f);
-
-        AddStaticGroundShadow(root, height * aspect * 0.7f, height * 0.35f, name + "_Shadow");
-
-        GameObject sprite = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        sprite.name = "Sprite";
-        Object.DestroyImmediate(sprite.GetComponent<Collider>());
-        sprite.transform.SetParent(root.transform);
-        sprite.transform.localScale = new Vector3(height * aspect, height, 1f);
-        sprite.transform.localPosition = Vector3.zero;
-
-        Renderer renderer = sprite.GetComponent<Renderer>();
-        Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
-        Material material = new Material(shader) { mainTexture = idleTex };
-
-        System.IO.Directory.CreateDirectory("Assets/LadyBug/Materials/lady_bug");
-        string materialPath = "Assets/LadyBug/Materials/lady_bug/" + name + ".mat";
-        AssetDatabase.DeleteAsset(materialPath);
-        AssetDatabase.CreateAsset(material, materialPath);
-        renderer.sharedMaterial = material;
-
-        SnakePose pose = root.AddComponent<SnakePose>();
-        SerializedObject poseSo = new SerializedObject(pose);
-        poseSo.FindProperty("walker").objectReferenceValue = walker;
-        poseSo.FindProperty("spriteRenderer").objectReferenceValue = renderer;
-        poseSo.FindProperty("idleTexture").objectReferenceValue = idleTex;
-        poseSo.FindProperty("movingTexture").objectReferenceValue = movingTex;
-        poseSo.FindProperty("height").floatValue = height;
-        poseSo.ApplyModifiedPropertiesWithoutUndo();
-
-        string savePath = "Assets/LadyBug/Prefabs/lady_bug/Snake.prefab";
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
-        Object.DestroyImmediate(root);
-        return prefab;
-    }
-
     static GameObject CreateEntityPrefab(string name, string texturePath, float height, string savePath, int? score = null, bool canWander = false, float? width = null, float? colliderHeight = null)
     {
         Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
@@ -1498,9 +1474,53 @@ public static class SceneSetup
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
 
+        AttachFrameAnimation(name, root, renderer);
+
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, savePath);
         Object.DestroyImmediate(root);
         return prefab;
+    }
+
+    // Objects that have a real frame set in Assets/Sprites/lady_bug/<name>Frames/
+    // animate off it instead of LaneWalker's placeholder wiggle. Frames are
+    // picked up by folder convention rather than a table, so adding a set for
+    // the next creature is a matter of dropping the files in — nothing here
+    // needs editing.
+    static void AttachFrameAnimation(string name, GameObject root, Renderer renderer)
+    {
+        string dir = "Assets/LadyBug/Sprites/lady_bug/" + name + "Frames";
+        if (!AssetDatabase.IsValidFolder(dir))
+            return;
+
+        string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { dir });
+        var paths = new System.Collections.Generic.List<string>();
+        foreach (string guid in guids)
+            paths.Add(AssetDatabase.GUIDToAssetPath(guid));
+        paths.Sort(System.StringComparer.Ordinal); // DogWalk01..10 — plain name order is frame order
+
+        var frameList = new System.Collections.Generic.List<Texture2D>();
+        foreach (string path in paths)
+        {
+            Texture2D t = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (t != null)
+                frameList.Add(t);
+        }
+
+        if (frameList.Count == 0)
+            return;
+
+        Texture2D[] frames = frameList.ToArray();
+
+        SpriteFrameAnimator anim = root.AddComponent<SpriteFrameAnimator>();
+        SerializedObject animSo = new SerializedObject(anim);
+        animSo.FindProperty("targetRenderer").objectReferenceValue = renderer;
+        SerializedProperty framesProp = animSo.FindProperty("frames");
+        framesProp.arraySize = frames.Length;
+        for (int i = 0; i < frames.Length; i++)
+            framesProp.GetArrayElementAtIndex(i).objectReferenceValue = frames[i];
+        animSo.ApplyModifiedPropertiesWithoutUndo();
+
+        Debug.Log($"{name}: frame animation from {dir} ({frames.Length} frames)");
     }
 
     // Flat ground decal — a Quad rotated flat on the road (same trick as
@@ -2244,10 +2264,30 @@ public static class SceneSetup
         // cover both text boxes (record reveal above, stats pages below)
         // since WinSequence shows them one after another with this staying
         // up for both, not two separate backdrops popping in and out.
+        // Затемнение всей сцены на время рекапа. Панели итогов и таблиц
+        // закрывают лишь часть экрана и разного размера, поэтому без этого
+        // фон за ними то темнел, то нет — в зависимости от того, какая
+        // страница сейчас показана. Создаётся до панелей и явно ставится
+        // первым ребёнком, чтобы рисоваться под всем остальным UI.
+        var recapDimGo = new GameObject("RecapDim");
+        recapDimGo.transform.SetParent(scoreCanvas.transform, false);
+        Image recapDimImg = recapDimGo.AddComponent<Image>();
+        recapDimImg.color = new Color(0f, 0f, 0f, 0.55f);
+        recapDimImg.raycastTarget = false;
+        RectTransform recapDimRt = recapDimGo.GetComponent<RectTransform>();
+        recapDimRt.anchorMin = Vector2.zero;
+        recapDimRt.anchorMax = Vector2.one;
+        recapDimRt.offsetMin = Vector2.zero;
+        recapDimRt.offsetMax = Vector2.zero;
+        recapDimGo.transform.SetAsFirstSibling();
+        recapDimGo.SetActive(false);
+
         var statsBackdropGo = new GameObject("StatsBackdrop");
         statsBackdropGo.transform.SetParent(scoreCanvas.transform, false);
         Image statsBackdropImg = statsBackdropGo.AddComponent<Image>();
-        statsBackdropImg.color = new Color(0f, 0f, 0f, 0.22f);
+        // Непрозрачная: при 0.22 сквозь панель просвечивала 3D-сцена и она
+        // читалась серой, а не как окно поверх игры.
+        statsBackdropImg.color = new Color(0.18f, 0.18f, 0.22f, 1f);
         Outline statsBackdropOutline = statsBackdropGo.AddComponent<Outline>();
         statsBackdropOutline.effectColor = Color.gray;
         statsBackdropOutline.effectDistance = new Vector2(4f, -4f);
@@ -2431,7 +2471,7 @@ public static class SceneSetup
         var leaderboardBgGo = new GameObject("Background");
         leaderboardBgGo.transform.SetParent(leaderboardRootRt, false);
         Image leaderboardBg = leaderboardBgGo.AddComponent<Image>();
-        leaderboardBg.color = new Color(0f, 0f, 0f, 0.22f);
+        leaderboardBg.color = new Color(0.18f, 0.18f, 0.22f, 1f); // непрозрачная, см. StatsBackdrop выше
         Outline leaderboardBgOutline = leaderboardBgGo.AddComponent<Outline>();
         leaderboardBgOutline.effectColor = Color.gray;
         leaderboardBgOutline.effectDistance = new Vector2(4f, -4f);
@@ -2470,6 +2510,20 @@ public static class SceneSetup
         so.FindProperty("winTextRoot").objectReferenceValue = winRt;
         so.FindProperty("winCongratsTextRoot").objectReferenceValue = winCongratsRt;
         so.FindProperty("statsBackdrop").objectReferenceValue = statsBackdropGo;
+        so.FindProperty("recapDim").objectReferenceValue = recapDimGo;
+
+        // Аплодисменты под праздничную часть рекапа (см. WinSequence.SetApplause).
+        // Свой AudioSource на объекте WinSequence, а не через SfxManager: тот
+        // играет одиночные PlayOneShot, а здесь нужен зацикленный фон, который
+        // держится через несколько экранов подряд.
+        AudioSource applauseSource = win.gameObject.AddComponent<AudioSource>();
+        applauseSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/lady_bug/WinApplause.wav");
+        applauseSource.loop = true;
+        applauseSource.playOnAwake = false;
+        applauseSource.volume = 1f;
+        if (applauseSource.clip == null)
+            Debug.LogWarning("WinApplause.wav not found — the recap will be silent.");
+        so.FindProperty("applauseSource").objectReferenceValue = applauseSource;
         so.FindProperty("statsTitle").objectReferenceValue = statsTitle;
         SerializedProperty statsRowsProp = so.FindProperty("statsRows");
         statsRowsProp.arraySize = statsRows.Length;
@@ -5425,6 +5479,23 @@ public static class SceneSetup
         "LotusYellow.png", "LotusBlue.png", "LotusPink.png",
     };
 
+    // Working titles for the 7 cabinet slots, shown on the loader's debug
+    // line so it is obvious which key is which. Index-matched to
+    // LoaderScreenController.gameStartKeys and to GameIntroThemes below.
+    //
+    // NOTE: only slot 1 exists. The other six are placeholders and every key
+    // still starts БК regardless (see CreateLoaderScreen's own comment).
+    static readonly string[] GameSlotTitles =
+    {
+        "1 - Lady Bug Hit The Road",
+        "2 - Викторина про жизнь",
+        "3 - Медитация в спешке",
+        "4 - Бесконечный Сизиф",
+        "5 - Завод",
+        "6 - Таблетка в космосе",
+        "7 - Игра про кота",
+    };
+
     // One themed falling-object set per game slot on the loader screen
     // (LoaderScreenController's gameStartKeys 1-7, see plan items 9-11) —
     // index 0 is БК's own flowers (lady_bug's real sprites), 1-6 are the
@@ -5436,15 +5507,40 @@ public static class SceneSetup
     // (true only for index 0) gates the fill-buzz sound and the menu music
     // cue — per feedback those are БК-specific content, not generic loader
     // chrome, so games 2-7 fill silently and don't trigger the menu music.
-    static readonly (string canvasName, string spriteFolder, string[] sprites, bool isPrimaryGame)[] GameIntroThemes =
+    // Order matches GameSlotTitles above, one row per key — what falls is what
+    // the game is about. The art was originally wired in the order it happened
+    // to be generated, which left e.g. cat paws falling for Сизиф and question
+    // marks for Завод; reordered per feedback so each set lands on its own game.
+    // fillClip is the looping bed that plays while the objects rain down,
+    // trimmed and crossfaded to loop without a seam (WAV, not MP3: the codec
+    // adds its own padding, which is audible as a hitch every time round).
+    // growing louder as the screen fills — every slot now has its own instead
+    // of only БК having one and the rest filling in silence. The cat slot
+    // reuses the meow the game already ships for a Cat collision rather than
+    // adding a second copy of the same mixkit sound.
+    static readonly (string canvasName, string spriteFolder, string[] sprites, string fillClip, bool isPrimaryGame)[] GameIntroThemes =
     {
-        ("IntroCanvas", "Assets/LadyBug/Sprites/lady_bug/", IntroFlowerSprites, true),
-        ("IntroCanvasGear", "Assets/LadyBug/Sprites/loader/", new[] { "Gear1.png", "Gear2.png", "Gear3.png" }, false),
-        ("IntroCanvasStone", "Assets/LadyBug/Sprites/loader/", new[] { "Stone1.png", "Stone2.png", "Stone3.png" }, false),
-        ("IntroCanvasCatPaw", "Assets/LadyBug/Sprites/loader/", new[] { "CatPaw1.png", "CatPaw2.png", "CatPaw3.png" }, false),
-        ("IntroCanvasQuestionMark", "Assets/LadyBug/Sprites/loader/", new[] { "QuestionMark1.png", "QuestionMark2.png", "QuestionMark3.png" }, false),
-        ("IntroCanvasMeditation", "Assets/LadyBug/Sprites/loader/", new[] { "Meditation1.png", "Meditation2.png", "Meditation3.png" }, false),
-        ("IntroCanvasRobotHead", "Assets/LadyBug/Sprites/loader/", new[] { "RobotHead1.png", "RobotHead2.png", "RobotHead3.png" }, false),
+        // 1 - Lady Bug Hit The Road — жужжание
+        ("IntroCanvas", "Assets/LadyBug/Sprites/lady_bug/", IntroFlowerSprites,
+            "Assets/LadyBug/Audio/lady_bug/Buzz.wav", true),
+        // 2 - Викторина про жизнь — тиканье часов
+        ("IntroCanvasQuestionMark", "Assets/LadyBug/Sprites/loader/", new[] { "QuestionMark1.png", "QuestionMark2.png", "QuestionMark3.png" },
+            "Assets/LadyBug/Audio/loader/IntroClock.wav", false),
+        // 3 - Медитация в спешке — индийская флейта
+        ("IntroCanvasMeditation", "Assets/LadyBug/Sprites/loader/", new[] { "Meditation1.png", "Meditation2.png", "Meditation3.png" },
+            "Assets/LadyBug/Audio/loader/IntroIndianFlute.wav", false),
+        // 4 - Бесконечный Сизиф — камни
+        ("IntroCanvasStone", "Assets/LadyBug/Sprites/loader/", new[] { "Stone1.png", "Stone2.png", "Stone3.png" },
+            "Assets/LadyBug/Audio/loader/IntroStones.wav", false),
+        // 5 - Завод — технологический гул
+        ("IntroCanvasGear", "Assets/LadyBug/Sprites/loader/", new[] { "Gear1.png", "Gear2.png", "Gear3.png" },
+            "Assets/LadyBug/Audio/loader/IntroFactoryHum.wav", false),
+        // 6 - Таблетка в космосе — космический эмбиент
+        ("IntroCanvasPill", "Assets/LadyBug/Sprites/loader/", new[] { "Pill1.png", "Pill2.png", "Pill3.png" },
+            "Assets/LadyBug/Audio/loader/IntroSpaceDrone.wav", false),
+        // 7 - Игра про кота — мяуканье
+        ("IntroCanvasCatPaw", "Assets/LadyBug/Sprites/loader/", new[] { "CatPaw1.png", "CatPaw2.png", "CatPaw3.png" },
+            "Assets/LadyBug/Audio/lady_bug/BadCat.mp3", false),
     };
 
     static IntroSequence[] CreateAllIntroScreens()
@@ -5453,7 +5549,7 @@ public static class SceneSetup
         for (int i = 0; i < GameIntroThemes.Length; i++)
         {
             var theme = GameIntroThemes[i];
-            result[i] = CreateIntroScreen(theme.canvasName, theme.spriteFolder, theme.sprites, theme.isPrimaryGame);
+            result[i] = CreateIntroScreen(theme.canvasName, theme.spriteFolder, theme.sprites, theme.fillClip, theme.isPrimaryGame);
         }
         return result;
     }
@@ -5465,7 +5561,7 @@ public static class SceneSetup
     // ready underneath. Highest sorting order of any canvas — has to cover
     // absolutely everything (all 7 of these instances share it — never
     // shown at once, see CreateAllIntroScreens/LoaderScreenController).
-    static IntroSequence CreateIntroScreen(string canvasName, string spriteFolder, string[] spriteFiles, bool isPrimaryGame)
+    static IntroSequence CreateIntroScreen(string canvasName, string spriteFolder, string[] spriteFiles, string fillClipPath, bool isPrimaryGame)
     {
         var canvasGo = new GameObject(canvasName);
         Canvas canvas = canvasGo.AddComponent<Canvas>();
@@ -5551,76 +5647,50 @@ public static class SceneSetup
             }
         }
 
-        // Digit/word overlay — real generated graffiti artwork
-        // (asset_gen/gen_asset.sh, see Assets/LadyBug/Sprites/CountdownGraffiti*.png),
-        // transparent cutouts so it draws directly over the finished flower
-        // pile underneath (later sibling, no separate wall background
-        // anymore — used to swap in a full-screen brick wall here first).
-        // One texture per step (5/4/3/2/1/СТАРТ), swapped on a single
-        // RawImage rather than 6 separate GameObjects (same texture-swap
-        // pattern TopResultsPage already uses for its photo slots).
-        // Full-screen, same as the flower grid underneath it.
-        var countdownGo = new GameObject("CountdownImage");
-        countdownGo.transform.SetParent(canvasGo.transform, false);
-        RawImage countdownImage = countdownGo.AddComponent<RawImage>();
-        RectTransform countdownRt = countdownImage.GetComponent<RectTransform>();
-        countdownRt.anchorMin = Vector2.zero;
-        countdownRt.anchorMax = Vector2.one;
-        countdownRt.offsetMin = Vector2.zero;
-        countdownRt.offsetMax = Vector2.zero;
+        // Black square covering the whole canvas, LAST sibling so it draws
+        // over the finished pile. Starts fully transparent; IntroSequence
+        // fades it in to hand off to the game screen behind it. The
+        // 5-4-3-2-1-СТАРТ graffiti overlay that used to sit here is gone, per
+        // feedback — its six CountdownGraffiti*.png are now unreferenced.
+        var darkenGo = new GameObject("DarkenOverlay");
+        darkenGo.transform.SetParent(canvasGo.transform, false);
+        Image darkenOverlay = darkenGo.AddComponent<Image>();
+        darkenOverlay.color = new Color(0f, 0f, 0f, 0f);
+        darkenOverlay.raycastTarget = false;
+        RectTransform darkenRt = darkenOverlay.GetComponent<RectTransform>();
+        darkenRt.anchorMin = Vector2.zero;
+        darkenRt.anchorMax = Vector2.one;
+        darkenRt.offsetMin = Vector2.zero;
+        darkenRt.offsetMax = Vector2.zero;
 
-        Texture2D[] countdownTextures =
-        {
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/CountdownGraffiti5.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/CountdownGraffiti4.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/CountdownGraffiti3.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/CountdownGraffiti2.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/CountdownGraffiti1.png"),
-            AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/CountdownGraffitiStart.png"),
-        };
-
-        // Continuous buzz while the flowers fill in (grows with them, see
-        // IntroSequence) — same clip the players' own wing-flap loop uses,
-        // reused rather than a new asset since it already reads as "in the
-        // air, building energy". Gear-shift plays once per countdown digit.
-        // Neither autoplays — IntroSequence starts/stops them on its own
-        // schedule instead of the instant the scene loads. Buzz (and the
-        // menu music cue below) are БК-specific — games 2-7 fill silently,
-        // per feedback (isPrimaryGame, see GameIntroThemes).
+        // The slot's own looping bed while its objects fill in, growing louder
+        // with them (see IntroSequence). Every slot has one now — this used to
+        // be БК's buzz only, gated on isPrimaryGame, so the other six filled in
+        // silence. isPrimaryGame still gates the MENU music below, which really
+        // is БК-specific. Does not autoplay: IntroSequence starts and fades it
+        // on its own schedule rather than the instant the scene loads.
         var introGo = new GameObject(canvasName + "_Controller");
-        AudioSource introBuzzSource = null;
-        if (isPrimaryGame)
-        {
-            introBuzzSource = introGo.AddComponent<AudioSource>();
-            introBuzzSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/lady_bug/Buzz.wav");
-            introBuzzSource.loop = true;
-            introBuzzSource.playOnAwake = false;
-            introBuzzSource.volume = 0f;
-        }
-
-        AudioSource introShiftSource = introGo.AddComponent<AudioSource>();
-        introShiftSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/lady_bug/GearShift.wav");
-        introShiftSource.playOnAwake = false;
+        AudioSource introBuzzSource = introGo.AddComponent<AudioSource>();
+        introBuzzSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(fillClipPath);
+        introBuzzSource.loop = true;
+        introBuzzSource.playOnAwake = false;
+        introBuzzSource.volume = 0f;
+        if (introBuzzSource.clip == null)
+            Debug.LogWarning($"IntroScreen {canvasName}: fill clip not found at {fillClipPath} — this slot will fill silently.");
 
         IntroSequence intro = introGo.AddComponent<IntroSequence>();
         SerializedObject introSo = new SerializedObject(intro);
         introSo.FindProperty("canvasRoot").objectReferenceValue = canvasGo;
         introSo.FindProperty("canvasGroup").objectReferenceValue = canvasGroup;
-        introSo.FindProperty("countdownImage").objectReferenceValue = countdownImage;
-        SerializedProperty countdownTexturesProp = introSo.FindProperty("countdownTextures");
-        countdownTexturesProp.arraySize = countdownTextures.Length;
-        for (int i = 0; i < countdownTextures.Length; i++)
-            countdownTexturesProp.GetArrayElementAtIndex(i).objectReferenceValue = countdownTextures[i];
-        if (isPrimaryGame)
-            introSo.FindProperty("buzzSource").objectReferenceValue = introBuzzSource;
+        introSo.FindProperty("darkenOverlay").objectReferenceValue = darkenOverlay;
+        introSo.FindProperty("buzzSource").objectReferenceValue = introBuzzSource;
         // Wired for every slot (not just isPrimaryGame) — Finish() always
         // calls startScreen.OnRevealed() to reset the menu's carousel back
         // to page 0 right as it becomes visible, regardless of which
         // slot's intro just finished. isPrimaryGame itself is also wired
-        // here so RunCountdown can gate its PlayMusic() call to БК only.
+        // here so Finish() can gate its PlayMusic() call to БК only.
         introSo.FindProperty("startScreen").objectReferenceValue = Object.FindAnyObjectByType<StartScreenController>();
         introSo.FindProperty("isPrimaryGame").boolValue = isPrimaryGame;
-        introSo.FindProperty("shiftSource").objectReferenceValue = introShiftSource;
         SerializedProperty flowersProp = introSo.FindProperty("flowers");
         flowersProp.arraySize = orderedFlowers.Count;
         for (int i = 0; i < orderedFlowers.Count; i++)
@@ -5751,9 +5821,16 @@ public static class SceneSetup
         debugHintText.alignment = TextAnchor.MiddleCenter;
         debugHintText.color = new Color(1f, 0.7f, 0.3f);
         debugHintText.text = "ВРЕМЕННО ДЛЯ ОТЛАДКИ - НАЖИМАЙТЕ ЦИФРЫ 1..7 ДЛЯ ЗАПУСКА ИГР";
+        // Index-matched to LoaderScreenController.gameStartKeys, i.e. this is
+        // the key you press, not just a list. Only slot 1 is a real game; the
+        // other six are titles for planned ones and all currently hand off
+        // into БК anyway (see GameIntroThemes).
+        debugHintText.text += "\n\n" + string.Join("\n", GameSlotTitles);
         Outline debugHintOutline = debugHintGo.AddComponent<Outline>();
         debugHintOutline.effectColor = Color.black;
         debugHintOutline.effectDistance = new Vector2(2f, -2f);
+        debugHintText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        debugHintText.verticalOverflow = VerticalWrapMode.Overflow; // 9 lines in a box sized for one — Truncate would blank the lot (see CreateJoystickHudArrow)
         RectTransform debugHintRt = debugHintText.GetComponent<RectTransform>();
         debugHintRt.anchorMin = new Vector2(0.5f, 1f);
         debugHintRt.anchorMax = new Vector2(0.5f, 1f);

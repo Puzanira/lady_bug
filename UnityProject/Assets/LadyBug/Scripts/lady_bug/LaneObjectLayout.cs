@@ -63,9 +63,6 @@ public static class LaneObjectLayout
             shadow.localPosition = new Vector3(0f, 0.02f - instance.transform.position.y, 0f);
         }
 
-        SnakePose pose = instance.GetComponent<SnakePose>();
-        if (pose != null)
-            pose.ApplyLaneScale(factor);
     }
 
     static bool IsGroundDecal(Transform sprite)

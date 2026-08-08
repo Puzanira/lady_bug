@@ -60,6 +60,23 @@ public class WinSequence : MonoBehaviour
     // Shared dark-tint backdrop behind the stats pages — same treatment
     // every other table in the game uses.
     [SerializeField] private GameObject statsBackdrop;
+    // Full-screen dim behind the whole recap. The panels themselves only
+    // cover part of the screen and differ in size page to page, so without
+    // this the background appeared to darken on some screens and not others.
+    //
+    // Goes up NOT at the start of the cutscene but only after the bugs have
+    // flown off (RunSequence, right after EndWinBoost), and stays until the
+    // scene reloads. ФИНИШ, the entity fade-out and the fly-away are all still
+    // "the world" and are meant to be watched undimmed; everything after is UI
+    // over a frozen scene.
+    [SerializeField] private GameObject recapDim;
+    // Looping crowd applause under the celebratory half of the recap. Started
+    // on the results pages only when the run actually placed in something,
+    // carries through the photo and the leaderboard tables without a gap, and
+    // is always on for the final firework hold — that beat is a celebration
+    // whether or not anything was won.
+    [SerializeField] private AudioSource applauseSource;
+    [SerializeField] private float applauseFadeOutDuration = 1.2f;
     // Stats pages — a title plus a pool of checkbox rows (CreateWinCheckRow),
     // matching the checklist style already used elsewhere (СУТЬ ИГРЫ, ЦЕЛЬ)
     // instead of one big multi-line text block. Each page uses however many
@@ -263,6 +280,7 @@ public class WinSequence : MonoBehaviour
         // First thing shown, before anything else changes — controls go
         // dead the moment this sequence takes over (right below), so the
         // player needs to see why before the world starts fading/flying.
+        // Deliberately undimmed: recapDim only comes up after the fly-away.
         if (finishText != null)
         {
             finishText.SetActive(true);
@@ -369,6 +387,13 @@ public class WinSequence : MonoBehaviour
         if (SpeedController.Instance != null)
             SpeedController.Instance.EndWinBoost();
 
+        // Dim goes up only now, once the bugs have flown off. The fly-away is
+        // the last thing that happens in the world itself and is meant to be
+        // watched undimmed; everything from this screen on is UI over a frozen
+        // scene, and that is what wants dimming.
+        if (recapDim != null)
+            recapDim.SetActive(true);
+
         if (_winText != null)
             _winText.text = WinTitlePlain;
         SetFinalCelebrationVisible(false);
@@ -412,6 +437,13 @@ public class WinSequence : MonoBehaviour
 
         HideGameplayHudPanels();
 
+        // Applause from here if the run placed at all — it then runs unbroken
+        // through the photo and the leaderboard tables. Starting and stopping
+        // it per screen would chop the crowd up between adjacent celebration
+        // screens.
+        if (leaderboardRecords != null && leaderboardRecords.Count > 0)
+            SetApplause(true);
+
         if (statsBackdrop != null)
             statsBackdrop.SetActive(true);
         try
@@ -445,6 +477,7 @@ public class WinSequence : MonoBehaviour
             _winText.text = WinTitlePlain;
         if (winTextRoot != null)
             winTextRoot.gameObject.SetActive(true);
+        SetApplause(true); // no-op if it is already running from the results pages
         SetFinalCelebrationVisible(true);
 
         // Once the leaderboard tables hide, all that's left on screen is
@@ -457,6 +490,7 @@ public class WinSequence : MonoBehaviour
             yield return _winCelebration.WaitForCyclesComplete();
 
         SetFinalCelebrationFxVisible(false);
+        yield return StartCoroutine(FadeOutApplause());
         yield return new WaitForSecondsRealtime(FinalCelebrationPostFxPause);
 
         // Drop any win-boost / pause leftovers before the reload — otherwise
@@ -470,6 +504,43 @@ public class WinSequence : MonoBehaviour
         // the first "Main" in Build Settings (Sisyphus) and launches the wrong game.
         // buildIndex is collision-proof both standalone and in-hub.
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    private void SetApplause(bool on)
+    {
+        if (applauseSource == null)
+            return;
+
+        if (on)
+        {
+            if (!applauseSource.isPlaying)
+            {
+                applauseSource.volume = 1f;
+                applauseSource.Play();
+            }
+            return;
+        }
+
+        applauseSource.Stop();
+    }
+
+    // Cutting a crowd off mid-clap sounds like the audio broke, so the very
+    // end eases out instead. Unscaled: the cutscene runs with the game paused.
+    private IEnumerator FadeOutApplause()
+    {
+        if (applauseSource == null || !applauseSource.isPlaying)
+            yield break;
+
+        float start = applauseSource.volume;
+        float t = 0f;
+        while (t < applauseFadeOutDuration)
+        {
+            t += Time.unscaledDeltaTime;
+            applauseSource.volume = Mathf.Lerp(start, 0f, Mathf.Clamp01(t / applauseFadeOutDuration));
+            yield return null;
+        }
+        applauseSource.Stop();
+        applauseSource.volume = start;
     }
 
     private void HideGameplayHudPanels()
@@ -823,23 +894,38 @@ public class WinSequence : MonoBehaviour
     // regardless, not one per category (sitting through a full ~10s
     // capture per qualifying category, up to 4 in a row for a run that
     // sweeps every leaderboard, read as the capture being stuck repeating
-    // instead of finishing). No separate on-screen "NEW RECORD: X — N
-    // МЕСТО" reveal anymore — ИТОГИ ЗАБЕГА's own inline tags already show
-    // that, this just handles the webcam capture (smile + 5s countdown, if
-    // a camera is available — see PlayerPhotoCapture) that used to follow it.
+    // instead of finishing). The capture screen itself lists EVERY category
+    // the run placed in, one line each — showing only the strongest made a run
+    // that took, say, both time and tricks look like it had managed just one.
+    // What was dropped earlier is only the standalone reveal BEAT that used to
+    // precede this; the placements themselves are still shown, here.
     private IEnumerator CaptureRecordPhoto(List<HighScoreManager.NewRecord> records)
     {
         if (PlayerPhotoCapture.Instance == null || records.Count == 0)
             yield break;
 
-        HighScoreManager.NewRecord best = records[0];
-        foreach (var r in records)
-            if (r.Rank < best.Rank)
-                best = r; // headline the strongest placement (rank 1 if any)
+        // Every category the run placed in, not just the strongest. Showing
+        // one line made a run that took, say, both time and tricks look like it
+        // had only managed the one.
+        var ordered = new List<HighScoreManager.NewRecord>(records);
+        // Explicit tiebreak: List.Sort is introsort and NOT stable, and ties are
+        // the common case here (a strong run takes the same place in several
+        // categories). Falling back to CategoryIndex keeps the order matching
+        // ИТОГИ ЗАБЕГА, which lists categories in that fixed order.
+        ordered.Sort((a, b) => a.Rank != b.Rank
+            ? a.Rank.CompareTo(b.Rank)
+            : a.CategoryIndex.CompareTo(b.CategoryIndex));
 
-        string message = best.Rank == 1
-            ? "НОВЫЙ РЕКОРД!\n" + best.CategoryName
-            : best.CategoryName + " — " + best.Rank + " МЕСТО!";
+        var sb = new System.Text.StringBuilder();
+        if (ordered[0].Rank == 1)
+            sb.Append("НОВЫЙ РЕКОРД!");
+        foreach (var r in ordered)
+        {
+            if (sb.Length > 0)
+                sb.Append('\n');
+            sb.Append(r.CategoryName).Append(" — ").Append(r.Rank).Append(" МЕСТО");
+        }
+        string message = sb.ToString();
 
         if (newRecordAnnounceText != null)
         {

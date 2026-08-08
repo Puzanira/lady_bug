@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 7722792550960052431}
   - component: {fileID: 7724382188204528784}
   - component: {fileID: 7986419128949759626}
+  - component: {fileID: 4944651810862120767}
   m_Layer: 0
   m_Name: Dog
   m_TagString: Untagged
@@ -84,6 +85,7 @@ MonoBehaviour:
   idleWiggleSpeed: 3
   crossingWiggleAngle: 10
   crossingWiggleSpeed: 12
+  idleTurnChance: 0.35
 --- !u!65 &7986419128949759626
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -105,6 +107,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.5, y: 1, z: 0.3}
   m_Center: {x: 0, y: -0.25, z: 0}
+--- !u!114 &4944651810862120767
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309420784786924409}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b985e06c0a1cb4a7195c919c8d7aae1e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LadyBug.Runtime::LadyBug.SpriteFrameAnimator
+  targetRenderer: {fileID: 567644883565250664}
+  frames:
+  - {fileID: 2800000, guid: 29690b94828134b888389db325d2f0a0, type: 3}
+  - {fileID: 2800000, guid: ef12a82f4552644ec866f2ec42bf8a02, type: 3}
+  - {fileID: 2800000, guid: 2857e78df1f4a4135b91943dd4f5014e, type: 3}
+  - {fileID: 2800000, guid: b4308d6e03edc403e97cc07e87928d78, type: 3}
+  - {fileID: 2800000, guid: 6005cb3702313447ca319206d3eada55, type: 3}
+  - {fileID: 2800000, guid: dba626c6ef5ca48efbe7f2e784348b58, type: 3}
+  - {fileID: 2800000, guid: 29e69330fd0db470aa1eced562e3644d, type: 3}
+  - {fileID: 2800000, guid: d9aa8e43716f54200b0029788722759d, type: 3}
+  - {fileID: 2800000, guid: c0873f12695af4e5db21a29e32b5f103, type: 3}
+  - {fileID: 2800000, guid: 69f0c3f1643f24d728829faeba2d12ba, type: 3}
+  frameDuration: 0.16
+  randomOrder: 1
 --- !u!1 &1619523868957710801
 GameObject:
   m_ObjectHideFlags: 0
