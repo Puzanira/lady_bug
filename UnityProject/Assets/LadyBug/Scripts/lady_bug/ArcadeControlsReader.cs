@@ -49,6 +49,25 @@ namespace LadyBug
             get { Probe(); return _joystickVector != null || _vectorGet != null; }
         }
 
+        /// <summary>
+        /// True when this game was started from the shared arcade-cabinet launcher rather than run
+        /// on its own. Same probe as <see cref="Available"/> — the facade only exists when the
+        /// launcher put it there — named for the one thing it is used to decide besides input:
+        /// whether the game's own attract flow should stand down.
+        ///
+        /// The cabinet launcher already IS an attract screen: it shows the 7-game control panel and
+        /// plays a hold-to-launch fill animation (adapted from IntroSequence) for whichever control
+        /// the player holds, then loads that game. lady_bug playing its own loader and intro on top
+        /// of that would show the player the same two screens twice in a row, so inside the launcher
+        /// LoaderScreenController and the IntroSequences stand aside and the menu comes up straight
+        /// away. Run standalone the facade is absent, this is false, and the loader, the slot
+        /// select and the flower intro all behave exactly as they always have.
+        /// </summary>
+        public static bool InsideArcadeLauncher
+        {
+            get { return Available; }
+        }
+
         /// <summary>Cabinet joystick vector, each axis -1..1. Zero when the facade is absent.</summary>
         public static Vector2 Joystick
         {

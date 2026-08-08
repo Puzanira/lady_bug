@@ -69,6 +69,27 @@ public class LoaderScreenController : MonoBehaviour
 
     private void Awake()
     {
+        // Started from the shared arcade-cabinet launcher, this screen would be the
+        // second attract screen in a row: the launcher shows its own control panel and
+        // plays the same hold-to-launch fill animation (it was adapted from
+        // IntroSequence) before handing over, so by the time this scene loads the
+        // player has already picked БК and watched the intro. Stand down entirely —
+        // hiding the canvas in Awake means not one frame of it is ever drawn, and
+        // disabling this component before OnEnable keeps the message carousel and the
+        // key-hold handoff to IntroSequence from running at all. StartScreenController
+        // notices the same thing and starts the menu itself instead of waiting for an
+        // IntroSequence.Finish() that will now never come.
+        //
+        // Run on its own — the normal case, and the only one outside the cabinet —
+        // the facade does not exist, this is false, and everything below is unchanged.
+        if (ArcadeControlsReader.InsideArcadeLauncher)
+        {
+            if (canvasRoot != null)
+                canvasRoot.SetActive(false);
+            enabled = false;
+            return;
+        }
+
         if (messageText != null)
             _messageRestPos = messageText.rectTransform.anchoredPosition;
     }

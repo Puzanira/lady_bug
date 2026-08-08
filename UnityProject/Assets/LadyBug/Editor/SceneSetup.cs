@@ -148,6 +148,15 @@ public static class SceneSetup
         // for an IntroSequence in the scene and stands down when one exists,
         // so re-enabling here does not start the menu music underneath the
         // loader.
+        //
+        // Both are built unconditionally, including for the arcade cabinet: the
+        // cabinet's shared launcher shows an attract screen and a hold-to-launch
+        // animation of its own before it loads this game, so there the two stand
+        // down at RUNTIME rather than being cut from the scene. See
+        // ArcadeControlsReader.InsideArcadeLauncher and its two call sites,
+        // LoaderScreenController.Awake and StartScreenController.Awake. Nothing
+        // in this generator, and nothing in the scene it writes, differs between
+        // the two cases.
         IntroSequence[] gameIntros = CreateAllIntroScreens();
         CreateLoaderScreen(gameIntros);
         CreateScreenInfoLabel();

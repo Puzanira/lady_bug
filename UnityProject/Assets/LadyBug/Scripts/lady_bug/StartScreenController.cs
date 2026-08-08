@@ -294,7 +294,18 @@ public class StartScreenController : MonoBehaviour
         // only wake up once a game control is held, so a search that skipped
         // inactive objects would find nothing and start the music underneath
         // the loader.
-        if (FindObjectsByType<IntroSequence>(FindObjectsInactive.Include).Length == 0)
+        //
+        // Inside the shared arcade-cabinet launcher the intros are in the scene
+        // but nothing will ever run them: the launcher already showed the player
+        // its own attract screen and hold-to-launch animation, so
+        // LoaderScreenController.Awake stands down and never calls
+        // BeginConfirmHold — leaving this menu waiting forever for a Finish()
+        // that isn't coming. Counting the intros alone would get that case
+        // wrong (music would never start, and the carousel would come up on
+        // whatever page it had silently cycled to), so ask the same question
+        // the loader asked and self-start here as well.
+        if (ArcadeControlsReader.InsideArcadeLauncher
+            || FindObjectsByType<IntroSequence>(FindObjectsInactive.Include).Length == 0)
         {
             PlayMusic();
             OnRevealed();
