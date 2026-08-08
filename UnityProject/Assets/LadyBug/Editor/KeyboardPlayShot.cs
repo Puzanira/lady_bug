@@ -116,8 +116,13 @@ public static class KeyboardPlayShot
                 }
                 break;
 
-            case 2: // let gameplay actually run before the still
-                if (now - _phaseStart > 2.5)
+            // Let gameplay actually run before the still. -shotDelay steers this
+            // too, not just menu/final: the road is empty for the first seconds
+            // and the frame-animated creatures (cat, crow, dog, rabbit, snake)
+            // only get near the camera later, so a fixed short wait photographs
+            // bare asphalt and proves nothing about them.
+            case 2:
+                if (now - _phaseStart > _shotDelay)
                 {
                     if (_mode == "final")
                     {
