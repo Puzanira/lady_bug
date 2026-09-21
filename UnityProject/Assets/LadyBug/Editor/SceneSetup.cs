@@ -2994,6 +2994,22 @@ public static class SceneSetup
         AssetDatabase.DeleteAsset(materialPath);
         AssetDatabase.CreateAsset(material, materialPath);
         renderer.sharedMaterial = material;
+        // The shoulder strip (CreateRoadShoulder) is ONE transparent object 150
+        // long whose sort position is its centre, a couple of metres from the
+        // camera — so it is drawn after every road entity ahead of it, however
+        // far ahead. Nothing else notices: obstacles live inside the lanes and
+        // never share screen pixels with the strip. This arch is 20 wide, so its
+        // two posts stand right over the strip, and the strip painted their feet
+        // out — the arch hung in the air with the gravel running across it, which
+        // is the "arch drawn under the shoulder" the cabinet shows.
+        // sortingOrder, not renderQueue: the project renders through the URP 2D
+        // Renderer (Assets/LadyBug/Rendering/LadyBug_Renderer2D.asset), which
+        // batches by sorting layer/order — moving the strip's material to queue
+        // 2450 or 2900 changes the picture by nothing at all, verified both ways.
+        // Lowering the strip instead is not available: at order -1 it falls
+        // behind the opaque side grass, which covers its whole footprint, and it
+        // disappears outright.
+        renderer.sortingOrder = 1;
 
         // Full-frame trigger, same as CreateArchPrefab — pass/hit is decided
         // by the player's vertical state in PlayerController, not by literal
