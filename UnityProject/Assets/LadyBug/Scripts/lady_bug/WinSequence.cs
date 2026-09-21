@@ -70,11 +70,12 @@ public class WinSequence : MonoBehaviour
     // "the world" and are meant to be watched undimmed; everything after is UI
     // over a frozen scene.
     [SerializeField] private GameObject recapDim;
-    // Looping crowd applause under the celebratory half of the recap. Started
-    // on the results pages only when the run actually placed in something,
-    // carries through the photo and the leaderboard tables without a gap, and
-    // is always on for the final firework hold — that beat is a celebration
-    // whether or not anything was won.
+    // Looping crowd applause, on ONLY for the three screens it was asked for:
+    // the results pages (and only if the run actually placed in something), the
+    // photo announce plus the capture itself, and the final firework hold. The
+    // leaderboard tables sit between the photo and the finale and stay silent,
+    // so the bed is deliberately stopped and restarted around them rather than
+    // held across.
     [SerializeField] private AudioSource applauseSource;
     [SerializeField] private float applauseFadeOutDuration = 1.2f;
     // Stats pages — a title plus a pool of checkbox rows (CreateWinCheckRow),
@@ -437,12 +438,11 @@ public class WinSequence : MonoBehaviour
 
         HideGameplayHudPanels();
 
-        // Applause from here if the run placed at all — it then runs unbroken
-        // through the photo and the leaderboard tables. Starting and stopping
-        // it per screen would chop the crowd up between adjacent celebration
-        // screens.
+        // Results pages — only if the run placed at all. Carries into the photo
+        // right after it (both were asked for, and they are adjacent), then
+        // stops before the leaderboard tables.
         if (leaderboardRecords != null && leaderboardRecords.Count > 0)
-            SetApplause(true);
+            StartApplause();
 
         if (statsBackdrop != null)
             statsBackdrop.SetActive(true);
@@ -470,6 +470,9 @@ public class WinSequence : MonoBehaviour
                 statsBackdrop.SetActive(false);
         }
 
+        // Leaderboard tables were not on the list — silence here.
+        StopApplause();
+
         if (!_skipToEnd && leaderboardRecords != null && leaderboardRecords.Count > 0)
             yield return StartCoroutine(ShowLeaderboardTables(leaderboardRecords));
 
@@ -477,7 +480,7 @@ public class WinSequence : MonoBehaviour
             _winText.text = WinTitlePlain;
         if (winTextRoot != null)
             winTextRoot.gameObject.SetActive(true);
-        SetApplause(true); // no-op if it is already running from the results pages
+        StartApplause(); // final firework hold — always, whatever the run scored
         SetFinalCelebrationVisible(true);
 
         // Once the leaderboard tables hide, all that's left on screen is
@@ -490,7 +493,7 @@ public class WinSequence : MonoBehaviour
             yield return _winCelebration.WaitForCyclesComplete();
 
         SetFinalCelebrationFxVisible(false);
-        yield return StartCoroutine(FadeOutApplause());
+        StopApplause();
         yield return new WaitForSecondsRealtime(FinalCelebrationPostFxPause);
 
         // Drop any win-boost / pause leftovers before the reload — otherwise
@@ -506,31 +509,41 @@ public class WinSequence : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    private void SetApplause(bool on)
+    private Coroutine _applauseFade;
+
+    private void StartApplause()
     {
         if (applauseSource == null)
             return;
 
-        if (on)
+        // A fade left running from the previous screen would keep winding the
+        // volume down under the new one — kill it and restore full level.
+        if (_applauseFade != null)
         {
-            if (!applauseSource.isPlaying)
-            {
-                applauseSource.volume = 1f;
-                applauseSource.Play();
-            }
-            return;
+            StopCoroutine(_applauseFade);
+            _applauseFade = null;
         }
 
-        applauseSource.Stop();
+        applauseSource.volume = 1f;
+        if (!applauseSource.isPlaying)
+            applauseSource.Play();
     }
 
-    // Cutting a crowd off mid-clap sounds like the audio broke, so the very
-    // end eases out instead. Unscaled: the cutscene runs with the game paused.
-    private IEnumerator FadeOutApplause()
+    // Cutting a crowd off mid-clap sounds like the audio broke, so it eases out.
+    // Fire-and-forget: the next screen starts immediately while this finishes
+    // underneath it. Unscaled — the cutscene runs with the game paused.
+    private void StopApplause()
     {
         if (applauseSource == null || !applauseSource.isPlaying)
-            yield break;
+            return;
 
+        if (_applauseFade != null)
+            StopCoroutine(_applauseFade);
+        _applauseFade = StartCoroutine(FadeOutApplause());
+    }
+
+    private IEnumerator FadeOutApplause()
+    {
         float start = applauseSource.volume;
         float t = 0f;
         while (t < applauseFadeOutDuration)
@@ -540,7 +553,8 @@ public class WinSequence : MonoBehaviour
             yield return null;
         }
         applauseSource.Stop();
-        applauseSource.volume = start;
+        applauseSource.volume = 1f;
+        _applauseFade = null;
     }
 
     private void HideGameplayHudPanels()
@@ -646,6 +660,11 @@ public class WinSequence : MonoBehaviour
             "Скорость: " + maxSpeed.ToString("0.0") + " км/ч" + RecordSuffix(3),
         };
         yield return StartCoroutine(ShowTextStatsPage("ИТОГИ ЗАБЕГА", totalsLines));
+
+        // Аплодисменты только под «ВЫ ПРОШЛИ ДО КОНЦА» и ИТОГИ ЗАБЕГА.
+        // Страницы СОБРАНО/СБИТО/ТРЮКИ ниже — просто сводка, они идут молча;
+        // толпа вернётся на экране фото (CaptureRecordPhoto).
+        StopApplause();
 
         // СОБРАНО/СБИТО: a small icon per unit collected/hit (repeated per
         // count) instead of a per-type text breakdown — see
@@ -903,6 +922,8 @@ public class WinSequence : MonoBehaviour
     {
         if (PlayerPhotoCapture.Instance == null || records.Count == 0)
             yield break;
+
+        StartApplause(); // снова, после молчаливых страниц сводки
 
         // Every category the run placed in, not just the strongest. Showing
         // one line made a run that took, say, both time and tricks look like it

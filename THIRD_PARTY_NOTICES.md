@@ -223,7 +223,7 @@ Kenney Particle Pack (CC0, credit optional) и его форк
 
 ## Unity
 
-Проект собирается на Unity 6000.0.78f1 и использует пакет `com.unity.ugui`.
+Проект собирается на Unity 6000.5.3f1 и использует пакет `com.unity.ugui`.
 Сам движок и его пакеты в репозиторий не входят (`UnityProject/Library/`
 исключён `.gitignore`) и распространяются по
 [Unity Terms of Service](https://unity.com/legal/terms-of-service).

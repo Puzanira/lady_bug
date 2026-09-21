@@ -19,6 +19,19 @@ public class LiveBugReactionAnimator : MonoBehaviour
     [SerializeField] private KeyCode upKey = KeyCode.UpArrow;
     [SerializeField] private KeyCode downKey = KeyCode.DownArrow;
 
+    // Wing buzz while this bug is in the air — the training screen was silent
+    // during flight while the real game buzzes (PlayerMovementSfx). Same trick
+    // as there: the source loops from the start at volume 0 and is only
+    // volume-gated, so entering and leaving flight never clicks or restarts the
+    // loop mid-cycle.
+    [SerializeField] private AudioSource wingsSource;
+    [SerializeField] private float wingsVolume = 0.5f;
+    // Running feet while ducked, the same pairing PlayerMovementSfx uses in
+    // game. Both sources are driven identically — loop from the start at
+    // volume 0, gated by state only.
+    [SerializeField] private AudioSource feetSource;
+    [SerializeField] private float feetVolume = 0.5f;
+
     [SerializeField] private RawImage bugImage;
     [SerializeField] private Texture2D bugNormalTexture;
     [SerializeField] private Texture2D bugAirTexture1;
@@ -336,11 +349,32 @@ public class LiveBugReactionAnimator : MonoBehaviour
 
         if (!LiveAnimators.Contains(this))
             LiveAnimators.Add(this);
+
+        // In OnEnable rather than Start: the carousel hides pages with
+        // SetActive, which stops the source, and it does not resume by itself
+        // when the page comes back round. Starts silent — Update gates volume.
+        StartSilentLoop(wingsSource);
+        StartSilentLoop(feetSource);
+    }
+
+    private static void StartSilentLoop(AudioSource src)
+    {
+        if (src == null || src.isPlaying)
+            return;
+        src.volume = 0f;
+        src.Play();
     }
 
     private void OnDisable()
     {
         LiveAnimators.Remove(this);
+        // The carousel hides pages with SetActive, and a paused source resumes
+        // at whatever volume it had — leave it silent so a page that reopens
+        // while the player is on the ground doesn't buzz for a frame.
+        if (wingsSource != null)
+            wingsSource.volume = 0f;
+        if (feetSource != null)
+            feetSource.volume = 0f;
     }
 
     private void CaptureRestPose()
@@ -461,6 +495,15 @@ public class LiveBugReactionAnimator : MonoBehaviour
         // and started again. A jump begun during the window is already
         // running by the time the pose starts being drawn.
         bool up = UpdateJumpState();
+        bool down = !up && DownHeld();
+
+        // Volume-gated, never Play/Stop — see wingsSource's own comment.
+        // Outside the settle gate below, so a move that began during the
+        // settle window is audible for its whole duration, not just the tail.
+        if (wingsSource != null)
+            wingsSource.volume = up ? wingsVolume : 0f;
+        if (feetSource != null)
+            feetSource.volume = down ? feetVolume : 0f;
 
         if (Time.time < _settleUntil)
             return;
@@ -469,8 +512,6 @@ public class LiveBugReactionAnimator : MonoBehaviour
             _laneIndex = Mathf.Max(_laneIndex - 1, -1);
         else if (LeanRightDown())
             _laneIndex = Mathf.Min(_laneIndex + 1, 1);
-
-        bool down = !up && DownHeld();
 
         Vector3 targetScale = _restScale;
         float laneX = _laneIndex < 0 ? laneXLeft : _laneIndex > 0 ? laneXRight : laneXCenter;

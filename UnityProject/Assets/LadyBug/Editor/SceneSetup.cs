@@ -14,10 +14,20 @@ public static class SceneSetup
 
     static readonly string PlayerOneBugSprite = "LadyBug1.png";
     static readonly string PlayerTwoBugSprite = "LadyBug2.png";
+
+    // Воздушный вариант ВСЕГДА принадлежит тому же жуку, что и наземный спрайт.
+    // Раньше он передавался отдельным аргументом — и на всех семи страницах-
+    // образцах указывал на чужого игрока, из-за чего жук в полёте менял цвет и
+    // оба образца становились одинаковыми. Вывод из имени убирает саму
+    // возможность рассогласования.
+    static string AirSpriteFor(string groundSprite) =>
+        groundSprite.Replace(".png", "Air1.png");
     static readonly Color PlayerOneBugTint = Color.white;
     static readonly Color PlayerTwoBugTint = new Color(0.52f, 0.52f, 0.56f);
 
-    // P1 always light (LadyBug1); P2 dark (LadyBug2) — different art, both white tint.
+    // P1 = LadyBug1 (КРАСНЫЙ); P2 = LadyBug2 (СИНЕ-ФИОЛЕТОВЫЙ) — разный арт, а не тон
+    // одного и того же. PlayerTwoBugTint затемняет P2 в игре и в превью «ВАШИ
+    // ДЕЙСТВИЯ»; диаграммы ОБРАЗЦА рисуют обоих на белом (CreateTrickBugIcon).
 
     static void GetStartLanes(out int startLaneRight, out int startLaneLeft) =>
         RoadLayout.GetStartLanes(LaneCount, out startLaneRight, out startLaneLeft);
@@ -99,8 +109,8 @@ public static class SceneSetup
         // player (see StartScreenController's joystickRight), and this is
         // its keyboard-only fallback; IJKL sits on the keyboard's own right
         // side, same relative hand position WASD gives player-left.
-        // P1 (PlayerLeft, sensors) = light LadyBug1; P2 (PlayerRight, joystick)
-        // = dark LadyBug2 — same in menu, gameplay, and training previews.
+        // P1 (PlayerLeft, sensors) = красный LadyBug1; P2 (PlayerRight, joystick)
+        // = сине-фиолетовый LadyBug2 — одинаково в меню, игре и превью тренировки.
         GameObject playerRight = CreatePlayer("PlayerRight", KeyCode.J, KeyCode.L, KeyCode.I, KeyCode.K,
             KeyCode.U, KeyCode.J, KeyCode.O, KeyCode.L, startLaneRight, PlayerTwoBugTint, PlayerTwoBugSprite);
         GameObject playerLeft = CreatePlayer("PlayerLeft", KeyCode.A, KeyCode.D, KeyCode.W, KeyCode.S,
@@ -3893,6 +3903,28 @@ public static class SceneSetup
         so.FindProperty("rightKey").intValue = (int)right;
         so.FindProperty("upKey").intValue = (int)up;
         so.FindProperty("downKey").intValue = (int)down;
+        // Жужжание крыльев в полёте — тот же клип, что у настоящих жуков
+        // (PlayerMovementSfx). Не autoplay: источник заводится в Start()
+        // самого аниматора на нулевой громкости.
+        AudioSource wings = bugGo.AddComponent<AudioSource>();
+        wings.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/lady_bug/Buzz.wav");
+        wings.loop = true;
+        wings.playOnAwake = false;
+        wings.volume = 0f;
+        if (wings.clip == null)
+            Debug.LogWarning("LiveBugPreview: Buzz.wav not found — training flight will be silent.");
+        so.FindProperty("wingsSource").objectReferenceValue = wings;
+
+        // Бег лапами в приседе — вторая половина той же пары, что и в игре
+        // (PlayerMovementSfx: ноги на земле, крылья в воздухе).
+        AudioSource feet = bugGo.AddComponent<AudioSource>();
+        feet.clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/LadyBug/Audio/lady_bug/RunFeet.mp3");
+        feet.loop = true;
+        feet.playOnAwake = false;
+        feet.volume = 0f;
+        if (feet.clip == null)
+            Debug.LogWarning("LiveBugPreview: RunFeet.mp3 not found — training duck will be silent.");
+        so.FindProperty("feetSource").objectReferenceValue = feet;
         so.FindProperty("bugImage").objectReferenceValue = bugImage;
         so.FindProperty("bugNormalTexture").objectReferenceValue = bugTex;
         so.FindProperty("bugAirTexture1").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + spriteFile.Replace(".png", "Air1.png"));
@@ -4435,7 +4467,7 @@ public static class SceneSetup
             // feedback it was still touching the page's own title above it.
             const float topHalfCenterY = 60f;
             const float bugHeight = 200f;
-            Texture2D bugTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/LadyBug1.png");
+            Texture2D bugTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + PlayerOneBugSprite);
             var bugGo = new GameObject("Bug");
             bugGo.transform.SetParent(content, false);
             RawImage bugImage = bugGo.AddComponent<RawImage>();
@@ -4459,8 +4491,9 @@ public static class SceneSetup
             so.FindProperty("isFlap").boolValue = isFlap;
             so.FindProperty("bugImage").objectReferenceValue = bugImage;
             so.FindProperty("bugNormalTexture").objectReferenceValue = bugTex;
-            so.FindProperty("bugAirTexture1").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/LadyBug1Air1.png");
-            so.FindProperty("bugAirTexture2").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/LadyBug1Air2.png");
+            // Одиночный жук страницы жестов — всегда игрок 1, воздушные кадры от него же.
+            so.FindProperty("bugAirTexture1").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + AirSpriteFor(PlayerOneBugSprite));
+            so.FindProperty("bugAirTexture2").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + PlayerOneBugSprite.Replace(".png", "Air2.png"));
             so.ApplyModifiedPropertiesWithoutUndo();
         });
 
@@ -4537,7 +4570,10 @@ public static class SceneSetup
             so.FindProperty("upArrows").objectReferenceValue = upArrows;
             so.FindProperty("arch").objectReferenceValue = archRt;
             so.FindProperty("successText").objectReferenceValue = successGo;
-            so.FindProperty("topBugAirTexture").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/LadyBug2Air1.png");
+            // Выводится из спрайта самого верхнего жука (PlayerOneBugSprite выше),
+            // а не задаётся отдельно — иначе он менял цвет при взлёте, см. AirSpriteFor.
+            so.FindProperty("topBugAirTexture").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + AirSpriteFor(PlayerOneBugSprite));
             so.ApplyModifiedPropertiesWithoutUndo();
         });
 
@@ -4587,9 +4623,9 @@ public static class SceneSetup
             // wherever these two start (RingTrickAnimation.Awake reads their
             // position directly), so this lines the entire loop up with the
             // route drawn behind it instead of starting mid-air relative to it.
-            // LadyBug2 (blue, player-left) on the left, LadyBug1 (white,
-            // player-right) on the right — same left/right-to-color mapping
-            // ВАШИ ДЕЙСТВИЯ's own live bugs use, so ОБРАЗЕЦ doesn't flip it.
+            // LadyBug1 (красный, игрок 1) слева, LadyBug2 (сине-фиолетовый,
+            // игрок 2) справа — та же раскладка лево/право, что у живых жуков
+            // «ВАШИ ДЕЙСТВИЯ», чтобы ОБРАЗЕЦ её не переворачивал.
             float startY = -ovalYRadius;
             RectTransform airBug = CreateTrickBugIcon(content, PlayerOneBugSprite, new Vector2(-bugX, startY), bugHeight);
             RectTransform groundBug = CreateTrickBugIcon(content, PlayerTwoBugSprite, new Vector2(bugX, startY), bugHeight);
@@ -4638,7 +4674,9 @@ public static class SceneSetup
             // short of the top.
             ringSo.FindProperty("arcHeight").floatValue = 2f * ovalYRadius;
             ringSo.FindProperty("successText").objectReferenceValue = successGo;
-            ringSo.FindProperty("airBugAirTexture").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/LadyBug2Air1.png");
+            // Выводится из спрайта летящего жука (PlayerOneBugSprite выше) — см. AirSpriteFor.
+            ringSo.FindProperty("airBugAirTexture").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + AirSpriteFor(PlayerOneBugSprite));
             ringSo.ApplyModifiedPropertiesWithoutUndo();
         }, routeDrawer);
 
@@ -4655,7 +4693,7 @@ public static class SceneSetup
     // needs no Inspector visibility since the scene is always regenerated
     // fresh from here.
     static (GameObject page, GameObject leftBug, Transform content) CreateTrickDiagramPage(Transform parent, string title, string spriteA, string spriteB,
-        string airTextureA, string airTextureB, TrickDiagramAnimation.Step[] pathA, TrickDiagramAnimation.Step[] pathB,
+        TrickDiagramAnimation.Step[] pathA, TrickDiagramAnimation.Step[] pathB,
         GameObject playerRight, GameObject playerLeft, float sampleContentScale,
         float staggerDelay = 0f, (Vector2 pos, float radius)[] routeDots = null, float laneSpacing = 210f,
         bool showArrowheads = true, params System.Func<float, Vector2>[] routeCurves)
@@ -4734,8 +4772,9 @@ public static class SceneSetup
             anim.staggerDelay = staggerDelay;
             anim.successText = successGo;
             anim.laneSpacing = laneSpacing;
-            anim.airTextureA = string.IsNullOrEmpty(airTextureA) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + airTextureA);
-            anim.airTextureB = string.IsNullOrEmpty(airTextureB) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + airTextureB);
+            // Выводятся из spriteA/spriteB — см. AirSpriteFor.
+            anim.airTextureA = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + AirSpriteFor(spriteA));
+            anim.airTextureB = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + AirSpriteFor(spriteB));
         }, routeDrawer);
 
         return (page, leftBug, capturedContent);
@@ -4798,7 +4837,7 @@ public static class SceneSetup
         // (0.47) to actually fit next to ВАШИ ДЕЙСТВИЯ, same reasoning as
         // RingTrickPage's own scale.
         var (page, leftBug, _) = CreateTrickDiagramPage(parent, "ЧЕХАРДА", PlayerOneBugSprite, PlayerTwoBugSprite,
-            "LadyBug2Air1.png", "LadyBug1Air1.png", pathA, pathB, playerRight, playerLeft, 0.47f, 0f, null, wideLaneSpacing, true, arc1, arc2);
+            pathA, pathB, playerRight, playerLeft, 0.47f, 0f, null, wideLaneSpacing, true, arc1, arc2);
         return (page, leftBug);
     }
 
@@ -4843,7 +4882,7 @@ public static class SceneSetup
         System.Func<float, Vector2> rowB2 = t => Vector2.Lerp(new Vector2(0f, -70f), new Vector2(620f, -70f), t);
         var dots = new (Vector2, float)[] { (new Vector2(0f, 110f), 16f), (new Vector2(0f, -70f), 16f) };
         var (page, leftBug, _) = CreateTrickDiagramPage(parent, "СИНХРОН", PlayerOneBugSprite, PlayerTwoBugSprite,
-            "LadyBug2Air1.png", null, pathA, pathB, playerRight, playerLeft, 0.47f, 0f, dots, wideLaneSpacing, true, rowA1, rowA2, rowB1, rowB2);
+            pathA, pathB, playerRight, playerLeft, 0.47f, 0f, dots, wideLaneSpacing, true, rowA1, rowA2, rowB1, rowB2);
         return (page, leftBug);
     }
 
@@ -4903,10 +4942,10 @@ public static class SceneSetup
         // content already fits comfortably next to ВАШИ ДЕЙСТВИЯ — just a
         // small safety-margin shrink, not the aggressive one the wide-route
         // pages need.
-        // spriteA=LadyBug1 (light, player-left) rides pathA; spriteB=LadyBug2
-        // (dark, player-right) rides pathB.
+        // spriteA=LadyBug1 (красный, игрок 1) едет по pathA; spriteB=LadyBug2
+        // (сине-фиолетовый, игрок 2) по pathB. Воздушные кадры выводятся из них же.
         var (page, leftBug, content) = CreateTrickDiagramPage(parent, "ЗАВИСАНИЕ", PlayerOneBugSprite, PlayerTwoBugSprite,
-            "LadyBug2Air1.png", "LadyBug1Air1.png", pathA, pathB, playerRight, playerLeft, 0.85f);
+            pathA, pathB, playerRight, playerLeft, 0.85f);
 
         var counterGo = new GameObject("HoverCounter");
         counterGo.transform.SetParent(content, false);
@@ -4992,9 +5031,9 @@ public static class SceneSetup
         };
         // Oval's own reach (±650) is the widest of any trick page's route —
         // shrunk down (0.46) to fit next to ВАШИ ДЕЙСТВИЯ.
-        // spriteA=LadyBug1 (light, player-left); spriteB=LadyBug2 (dark, player-right).
+        // spriteA=LadyBug1 (красный, игрок 1); spriteB=LadyBug2 (сине-фиолетовый, игрок 2).
         var (page, leftBug, _) = CreateTrickDiagramPage(parent, "БОЛЬШОЕ КОЛЬЦО", PlayerOneBugSprite, PlayerTwoBugSprite,
-            "LadyBug2Air1.png", "LadyBug1Air1.png", pathA, pathB, playerRight, playerLeft, 0.46f, 0f, null, wideLaneSpacing, true, oval);
+            pathA, pathB, playerRight, playerLeft, 0.46f, 0f, null, wideLaneSpacing, true, oval);
         return (page, leftBug);
     }
 
@@ -5061,11 +5100,11 @@ public static class SceneSetup
         // Lemniscate's own reach (±600) is well past half a page — shrunk
         // down (0.5) to fit next to ВАШИ ДЕЙСТВИЯ.
         var (page, leftBug, _) = CreateTrickDiagramPage(parent, "БЕСКОНЕЧНОСТЬ", PlayerOneBugSprite, PlayerTwoBugSprite,
-            "LadyBug2Air1.png", "LadyBug1Air1.png", pathA, pathB, playerRight, playerLeft, 0.5f, 0f, null, wideLaneSpacing, false, infinity);
+            pathA, pathB, playerRight, playerLeft, 0.5f, 0f, null, wideLaneSpacing, false, infinity);
         return (page, leftBug);
     }
 
-    // LadyBug1 = light P1, LadyBug2 = dark P2; both use white tint here.
+    // LadyBug1 = красный P1, LadyBug2 = сине-фиолетовый P2; здесь оба на белом тоне.
     static RectTransform CreateTrickBugIcon(Transform parent, string spriteFile, Vector2 pos, float height)
     {
         Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/LadyBug/Sprites/lady_bug/" + spriteFile);

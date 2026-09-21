@@ -1247,7 +1247,10 @@ public class PlayerController : MonoBehaviour
 
             if (!other.IsAirborne)
                 grounded = other;
-            else if (GetEntityId() > other.GetEntityId())
+            // GetInstanceID() became a hard error in Unity 6000.5 — GetEntityId()
+            // is the replacement. Compared via CompareTo, not '>': EntityId is a
+            // struct with no comparison operators, only CompareTo/Equals.
+            else if (GetEntityId().CompareTo(other.GetEntityId()) > 0)
                 airbornePeer = other; // the lower ID wins the tie and lands
         }
 
