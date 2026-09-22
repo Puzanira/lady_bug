@@ -3,7 +3,9 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // Yes/No "quit game?" dialog — opened by DuckToExitController (all players
-// duck-hold) or HelpController (Q on the help screen).
+// duck-hold, or the cabinet's exit button) or HelpController (Q on the help
+// screen). Answered either by picking a side and confirming (lean + jump, or
+// the arrow keys), or outright with the cabinet panel's green/red buttons.
 public class PauseController : MonoBehaviour
 {
     public static PauseController Instance { get; private set; }
@@ -17,6 +19,7 @@ public class PauseController : MonoBehaviour
     private bool _dialogOpen;
     private bool _confirmYes;
     private PlayerController[] _players;
+    private int _openedFrame = -1;
 
     public bool IsDialogOpen => _dialogOpen;
 
@@ -37,6 +40,7 @@ public class PauseController : MonoBehaviour
     {
         _dialogOpen = true;
         _confirmYes = false;
+        _openedFrame = Time.frameCount;
         _players = FindObjectsOfType<PlayerController>();
 
         if (SpeedController.Instance != null)
@@ -70,13 +74,34 @@ public class PauseController : MonoBehaviour
             }
         }
 
-        if (left || right)
+        // The cabinet panel answers the question outright, no navigating to an
+        // option first: green is ДА, red is НЕТ — the same NO/YES the panel's
+        // own firmware assigns those two buttons. The lean-and-jump path above
+        // stays exactly as it was, for the keyboard and the gesture sensors.
+        // Not on the frame the dialog opened: red is also what OPENS it from
+        // inside the run (DuckToExitController), and that same one-frame edge
+        // would otherwise be read here as НЕТ and shut the dialog again
+        // instantly. Update order between the two components isn't fixed, so
+        // the guard is on the frame number rather than on who runs first.
+        JoystickSerial panel = Time.frameCount != _openedFrame ? JoystickSerial.Instance : null;
+        bool panelYes = panel != null && panel.GreenButtonDown;
+        bool panelNo = panel != null && panel.RedButtonDown;
+
+        if (panelYes || panelNo)
+        {
+            // Move the highlight to the answer being given before acting on
+            // it, so the screen shows what was chosen rather than the run
+            // vanishing with НЕТ still lit.
+            _confirmYes = panelYes;
+            UpdateDialogVisuals();
+        }
+        else if (left || right)
         {
             _confirmYes = !_confirmYes;
             UpdateDialogVisuals();
         }
 
-        if (confirm)
+        if (confirm || panelYes || panelNo)
         {
             if (_confirmYes)
             {

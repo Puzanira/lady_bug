@@ -21,6 +21,12 @@ public class LoaderScreenController : MonoBehaviour
     [SerializeField] private GameObject canvasRoot;
     [SerializeField] private Text messageText;
 
+    // Attract-mode playlist — shuffled 8-bit tracks, running continuously for
+    // as long as this screen is the one on show. Built by
+    // SceneSetup.CreateLoaderScreen from every LoaderMusic_* clip in
+    // Assets/Audio/loader.
+    [SerializeField] private MenuMusicRotator music;
+
     [SerializeField]
     private KeyCode[] gameStartKeys =
     {
@@ -73,6 +79,9 @@ public class LoaderScreenController : MonoBehaviour
     private void OnEnable()
     {
         StartCoroutine(CycleMessages());
+
+        if (music != null)
+            music.Play();
     }
 
     private void Update()
@@ -90,6 +99,14 @@ public class LoaderScreenController : MonoBehaviour
 
                 _holdingIndex = i;
                 _activeIntro = intro;
+                // Silence the playlist before the game's intro starts — that
+                // screen has its own fill sound per slot, and the two playing
+                // over each other is just noise. Explicit rather than relying
+                // on the canvas going inactive to take the AudioSource with
+                // it: this also clears the rotator's "keep playing" flag, so
+                // it can't restart itself behind the intro.
+                if (music != null)
+                    music.StopRotating();
                 if (canvasRoot != null)
                     canvasRoot.SetActive(false);
                 _activeIntro.BeginConfirmHold();
@@ -107,10 +124,42 @@ public class LoaderScreenController : MonoBehaviour
                 _activeIntro.AbortIfIncomplete();
                 if (canvasRoot != null)
                     canvasRoot.SetActive(true);
+                // Back on the attract screen, so the playlist comes back with
+                // it — on a fresh random track, not the middle of the one that
+                // was cut off. After SetActive, or the AudioSource would still
+                // be on a disabled object and refuse to start.
+                if (music != null)
+                    music.Play();
             }
             _holdingIndex = -1;
             _activeIntro = null;
         }
+    }
+
+    // Back to attract mode from the menu — Esc on the keyboard or the
+    // cabinet's SYSTEM button, see StartScreenController. The menu canvas is
+    // left active underneath exactly as it is at boot: this canvas sorts above
+    // it (230 vs 100) and simply covers it again.
+    //
+    // The message carousel needs no restart: it is a coroutine on this object,
+    // which stays active the whole time, so it has been cycling behind the
+    // menu all along.
+    public void ReturnToLoader()
+    {
+        if (canvasRoot == null || canvasRoot.activeSelf)
+            return; // already the screen on show
+
+        // Whatever slot hold took us away from here is long finished.
+        _holdingIndex = -1;
+        _activeIntro = null;
+
+        canvasRoot.SetActive(true);
+
+        // After SetActive, or the AudioSource would still be on a disabled
+        // object. Starts on a random track rather than the pinned opener —
+        // that one is for the start of a session (see MenuMusicRotator).
+        if (music != null)
+            music.Play();
     }
 
     private IEnumerator CycleMessages()

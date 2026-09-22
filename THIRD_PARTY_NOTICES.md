@@ -117,6 +117,82 @@ mixkit, 183 freesound, 97 pixabay и всех 11 звуков, извлечён�
 
 ---
 
+## Музыка экрана лаунчера — `Assets/Audio/loader/LoaderMusic_*.mp3`
+
+Плейлист attract-режима: 10 треков, все стилизованы под 8-битный звук старых
+приставок, разных музыкальных жанров. Крутятся случайно и непрерывно, пока не
+запущена игра (`LoaderScreenController` + `MenuMusicRotator`).
+
+⚠️ **Ни один из них НЕ с mixkit, и это не случайность.** У mixkit две разные
+лицензии, и они расходятся ровно в нашем случае: Sound Effects Free License
+видеоигры разрешает явно, а **Stock Music Free License держит Video Games в
+списке Not Allowed** вместе с CD/DVD и ТВ-радио (проверено 2026-09-22 на
+`mixkit.co/license/modal/musicFree` и `/sfxFree`). Поэтому звуковые эффекты
+выше — с mixkit, а музыка здесь — нет. Если когда-нибудь будете добавлять
+трек в этот плейлист, mixkit не подходит в принципе.
+
+| Файл | Трек | Автор | Лицензия | Атрибуция |
+|---|---|---|---|---|
+| `LoaderMusic_01_Bebop.mp3` | Bebop (Chiptune) — джаз/бибоп | Pro Sensory (Alex McCulloch) | CC0 1.0 | не требуется |
+| `LoaderMusic_02_Polka.mp3` | Spazzmatica Polka — полька | Kevin MacLeod | CC BY 4.0 | **обязательна** |
+| `LoaderMusic_03_Waltz.mp3` | 8-bit Quirky Waltz — вальс 3/4 | Ted Kerr (Wolfgang_) | CC BY 4.0 | **обязательна** |
+| `LoaderMusic_04_Funk.mp3` | NES chiptune «Slam-Funk» — фанк | Haley Halcyon | CC BY 4.0 | **обязательна** |
+| `LoaderMusic_05_Oriental.mp3` | Oriental Music C64 Style — восточный мотив на SID | skrjablin | CC BY 3.0 **или** CC0 1.0 (двойная, на выбор) | по выбранной лицензии |
+| `LoaderMusic_06_Shanty.mp3` | Salty Ditty — пиратская шанти | Kevin MacLeod | CC BY 4.0 | **обязательна** |
+| `LoaderMusic_07_Balalaika.mp3` | Padanaya Blokov — балалайка, «русская» тема | Kevin MacLeod | CC BY 4.0 | **обязательна** |
+| `LoaderMusic_08_March.mp3` | Desert March — марш | tcarisland | CC BY 4.0 | **обязательна** |
+| `LoaderMusic_09_Medieval.mp3` | Medieval: The Old Tower Inn — средневековый фолк | RandomMind | CC0 1.0 | не требуется |
+| `LoaderMusic_10_Ambient.mp3` | Prairie Nights (JRPG Pack #1) — спокойный ночной эмбиент | Juhani Junkala (SubspaceAudio) | CC0 1.0 | не требуется |
+
+Страницы источников: [Bebop](https://opengameart.org/content/bebop-chiptune) ·
+[Spazzmatica Polka](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100721) ·
+[Quirky Waltz](https://opengameart.org/content/8-bit-quirky-waltz) ·
+[Slam-Funk](https://opengameart.org/content/nes-chiptune-slam-funk) ·
+[Oriental C64](https://opengameart.org/content/oriental-music-c64-style) ·
+[Salty Ditty](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600053) ·
+[Padanaya Blokov](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100606) ·
+[Desert March](https://opengameart.org/content/desert-march) ·
+[The Old Tower Inn](https://opengameart.org/content/chiptune-medieval-the-old-tower-inn) ·
+[JRPG Pack #1](https://opengameart.org/content/jrpg-pack-1-exploration)
+
+### Готовый блок атрибуции
+
+CC BY требует три вещи: указать автора, дать ссылку на лицензию и **отметить,
+что файл менялся**. Менялся он у всех десяти: перекодирован в MP3 48 kbps при
+22050 Гц (`asset_gen/fetch_loader_music.sh`) — ради размера репозитория и
+приставочного тембра. Музыка не редактировалась, только сжата.
+
+```
+Музыка на экране загрузчика (все треки перекодированы в MP3 48 kbps / 22050 Гц,
+сама музыка не изменена):
+
+"Spazzmatica Polka", "Salty Ditty", "Padanaya Blokov" — Kevin MacLeod
+(incompetech.com), Creative Commons By Attribution 4.0,
+https://creativecommons.org/licenses/by/4.0/
+
+"8-bit Quirky Waltz" — Ted Kerr (Wolfgang_), CC BY 4.0
+"NES chiptune Slam-Funk" — Haley Halcyon, CC BY 4.0
+"Desert March" — tcarisland, CC BY 4.0
+"Oriental Music C64 Style" — skrjablin, CC BY 3.0
+https://creativecommons.org/licenses/by/4.0/ · https://creativecommons.org/licenses/by/3.0/
+
+"Bebop (Chiptune)" — Alex McCulloch (Pro Sensory), CC0 1.0
+"Medieval: The Old Tower Inn" — RandomMind, CC0 1.0
+"Prairie Nights" — Juhani Junkala (SubspaceAudio), CC0 1.0
+```
+
+Три последних под CC0 — атрибуция юридически не нужна, авторы её только
+приветствуют; оставлена по-человечески. У `05_Oriental` автор дал выбор между
+CC BY 3.0 и CC0: указан по CC BY, потому что это строже и покрывает оба
+варианта.
+
+**Отбраковано при отборе** (чтобы не возвращались к этим кандидатам): трек под
+**CC-BY-SA 3.0** без CC-BY-альтернативы — share-alike способен задеть саму
+игру, а не только трек; трек с рабочей лицензией, но нерабочей прямой ссылкой;
+и «8bit Bossa» под CC0 — длительность 59.6 с, не дотянул до нижней границы 60.
+
+---
+
 ## Спрайты — OpenGameArt
 
 В `RawAssets/CelebrationFX/opengameart/`. Подробности и рекомендации по

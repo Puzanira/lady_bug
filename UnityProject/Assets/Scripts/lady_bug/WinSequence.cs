@@ -216,8 +216,13 @@ public class WinSequence : MonoBehaviour
         if (continuePromptRoot != null)
             continuePromptRoot.SetActive(true);
 
+        // Green says "carry on" like a flap does; red ends the run now instead
+        // of sitting out the rest of the countdown, which is the only way to
+        // answer "no" early — letting the countdown run out means the same
+        // thing, just slower.
         bool flapped = false;
-        for (int n = ContinueCountdownStart; n >= 1 && !flapped; n--)
+        bool declined = false;
+        for (int n = ContinueCountdownStart; n >= 1 && !flapped && !declined; n--)
         {
             if (continueCountdownText != null)
                 continueCountdownText.text = n.ToString();
@@ -226,9 +231,16 @@ public class WinSequence : MonoBehaviour
             while (t < 1f)
             {
                 t += Time.deltaTime;
-                if (AnyPlayerFlapping())
+
+                JoystickSerial panel = JoystickSerial.Instance;
+                if (AnyPlayerFlapping() || (panel != null && panel.GreenButtonDown))
                 {
                     flapped = true;
+                    break;
+                }
+                if (panel != null && panel.RedButtonDown)
+                {
+                    declined = true;
                     break;
                 }
                 yield return null;
@@ -239,6 +251,14 @@ public class WinSequence : MonoBehaviour
             continuePromptRoot.SetActive(false);
 
         _awaitingContinueDecision = false;
+
+        // One frame before the recap starts, so the red press that declined
+        // the continue isn't still readable when RunSequence's first WaitPage
+        // asks AnyInputPressed() — coroutines resume after Update, so without
+        // this the same single press would answer the question AND skip the
+        // whole recap it was asking for.
+        if (declined)
+            yield return null;
 
         if (flapped)
         {
@@ -898,6 +918,15 @@ public class WinSequence : MonoBehaviour
             if (gesture.JumpDown || gesture.DuckHeld || gesture.LeanLeftDown || gesture.LeanRightDown)
                 return true;
         }
+
+        // The cabinet's green and red count as "any input" here — they are
+        // player-facing buttons, so the same reasoning as SkipKeys applies.
+        // Deliberately not the exit button: that one has its own meaning and
+        // must not be spent skipping a page.
+        JoystickSerial panel = JoystickSerial.Instance;
+        if (panel != null && (panel.GreenButtonDown || panel.RedButtonDown))
+            return true;
+
         return false;
     }
 

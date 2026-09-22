@@ -3375,11 +3375,25 @@ public static class SceneSetup
         rowBg.type = Image.Type.Sliced;
         Outline rowOutline = rowGo.AddComponent<Outline>();
         rowOutline.effectDistance = new Vector2(4f, -4f);
+        // All three row backgrounds are the SAME width, running off both sides
+        // of the screen by the same amount. They were briefly different widths
+        // per row; on screen that just read as sloppy alignment, so they were
+        // levelled. Keep them equal — change RowBgOverhang, not one row.
+        //
+        // Stretched by anchor rather than given a fixed width, so the overhang
+        // survives any aspect ratio: the canvas matches on height
+        // (matchWidthOrHeight = 1), so its width in reference units grows on a
+        // wider screen and a fixed 2080 would stop overhanging exactly where
+        // the cabinet's own screen is widest. With x anchors at 0 and 1,
+        // sizeDelta.x is the width ADDED beyond the parent, so this is
+        // MenuRowBgOverhang per side.
+        const float RowBgOverhang = MenuRowBgOverhang;
+
         RectTransform rowRt = rowGo.GetComponent<RectTransform>();
-        rowRt.anchorMin = new Vector2(0.5f, 0.5f);
-        rowRt.anchorMax = new Vector2(0.5f, 0.5f);
+        rowRt.anchorMin = new Vector2(0f, 0.5f);
+        rowRt.anchorMax = new Vector2(1f, 0.5f);
         rowRt.pivot = new Vector2(0.5f, 0.5f);
-        rowRt.sizeDelta = new Vector2(780f, 80f); // width widened both sides (was 700) — height already right
+        rowRt.sizeDelta = new Vector2(RowBgOverhang * 2f, 80f);
         rowRt.anchoredPosition = new Vector2(0f, -315f);
 
         GameObject option1 = CreateMenuOption(rowGo.transform, "Option1", new Vector2(-180f, 0f), "[X] 1 ИГРОК", 280f, 32, 60f);
@@ -3395,11 +3409,12 @@ public static class SceneSetup
         lanesRowBg.type = Image.Type.Sliced;
         Outline lanesRowOutline = lanesRowGo.AddComponent<Outline>();
         lanesRowOutline.effectDistance = new Vector2(4f, -4f);
+        // Off both edges as well — see RowBgOverhang's comment on OptionsRow.
         RectTransform lanesRowRt = lanesRowGo.GetComponent<RectTransform>();
-        lanesRowRt.anchorMin = new Vector2(0.5f, 0.5f);
-        lanesRowRt.anchorMax = new Vector2(0.5f, 0.5f);
+        lanesRowRt.anchorMin = new Vector2(0f, 0.5f);
+        lanesRowRt.anchorMax = new Vector2(1f, 0.5f);
         lanesRowRt.pivot = new Vector2(0.5f, 0.5f);
-        lanesRowRt.sizeDelta = new Vector2(900f, 80f);
+        lanesRowRt.sizeDelta = new Vector2(RowBgOverhang * 2f, 80f);
         lanesRowRt.anchoredPosition = new Vector2(0f, -390f);
 
         var laneOptionBgs = new Image[RoadLayout.MaxLaneCount];
@@ -3468,14 +3483,14 @@ public static class SceneSetup
         startRowBg.type = Image.Type.Sliced;
         Outline startRowOutline = startRowGo.AddComponent<Outline>();
         startRowOutline.effectDistance = new Vector2(4f, -4f);
+        // Same width as the two rows above — see RowBgOverhang's comment on
+        // OptionsRow. The buttons inside stay their own size and centred; only
+        // the backing panel spans the screen.
         RectTransform startRowRt = startRowGo.GetComponent<RectTransform>();
-        startRowRt.anchorMin = new Vector2(0.5f, 0.5f);
-        startRowRt.anchorMax = new Vector2(0.5f, 0.5f);
+        startRowRt.anchorMin = new Vector2(0f, 0.5f);
+        startRowRt.anchorMax = new Vector2(1f, 0.5f);
         startRowRt.pivot = new Vector2(0.5f, 0.5f);
-        // Widened again (was 420, one centered button) to fit ТРЕНИРОВКА
-        // beside СТАРТ — same two-box-side-by-side layout as the player-
-        // count row above.
-        startRowRt.sizeDelta = new Vector2(700f, 90f);
+        startRowRt.sizeDelta = new Vector2(RowBgOverhang * 2f, 90f);
         startRowRt.anchoredPosition = new Vector2(0f, -465f);
 
         GameObject startBtn = CreateMenuOption(startRowGo.transform, "StartButton", new Vector2(-180f, 0f), "[X] СТАРТ", 300f, 32, 60f);
@@ -3584,43 +3599,18 @@ public static class SceneSetup
         trainingCanvasGo.SetActive(false);
 
         // Bottom-left free space left behind once the per-player gesture
-        // HUDs (КЛАВИШИ/ЖЕСТЫ panels) are hidden for the menu — a short,
-        // input-agnostic reminder of how to actually drive THIS menu
-        // (works from keyboard, the keyboard gesture simulator, or real
-        // sensors alike, see StartScreenController.Update).
-        // Narrower (was 700, reached under the controller-selection row's
-        // left edge — same class of bug as the page-caption text creeping
-        // into the button area below it) and correspondingly taller/smaller
-        // so the extra wrapped lines still fit above the canvas bottom edge
-        // instead of being clipped by Text's default Truncate overflow.
-        var menuHelpGo = new GameObject("MenuHelpText");
-        menuHelpGo.transform.SetParent(canvasGo.transform, false);
-        Text menuHelp = menuHelpGo.AddComponent<Text>();
-        menuHelp.font = GameFont;
-        menuHelp.fontSize = 20;
-        menuHelp.fontStyle = FontStyle.Bold;
-        // Bottom-RIGHT — swapped with ControllerStatusText above.
-        menuHelp.alignment = TextAnchor.LowerRight;
-        menuHelp.horizontalOverflow = HorizontalWrapMode.Wrap;
-        menuHelp.verticalOverflow = VerticalWrapMode.Overflow;
-        menuHelp.color = new Color(0.9f, 0.9f, 0.9f);
-        // Split across more, shorter explicit lines rather than 2 long ones
-        // relying on auto-wrap — the "(клавиши, имитатор жестов или датчики
-        // — любое)" line was dropped entirely, redundant with the
-        // controller-selection row directly above this text.
-        menuHelp.text = "ВЫБОР:\n"
-            + "WASD · IJKL\n"
-            + "\n"
-            + "НАЧАЛО:\n"
-            + "ВЫБРАТЬ СТАРТ ИЛИ ТРЕНИРОВКА\n"
-            + "И ДЕРЖАТЬ ВНИЗ 5 СЕК";
-        menuHelpGo.AddComponent<Outline>().effectColor = Color.black;
-        RectTransform menuHelpRt = menuHelp.GetComponent<RectTransform>();
-        menuHelpRt.anchorMin = new Vector2(1f, 0f);
-        menuHelpRt.anchorMax = new Vector2(1f, 0f);
-        menuHelpRt.pivot = new Vector2(1f, 0f);
-        menuHelpRt.sizeDelta = new Vector2(450f, 190f); // verticalOverflow=Overflow handles the rest if 6 short lines run a touch past this
-        menuHelpRt.anchoredPosition = new Vector2(-30f, 30f);
+        // The single bottom-right block that used to explain the whole menu at
+        // once is gone. In its place each row carries its own hint, shown only
+        // while that row is selected, so a player reads the controls for the
+        // thing they are actually on (StartScreenController.UpdateRowHints
+        // fills the copy and switches it by connected controller).
+        //
+        // Parented to the rows themselves, so they travel with them, and all
+        // three sit in one column just clear of the widest row's content
+        // (the 7 lane options reach about 375 from centre).
+        Text rowHintPlayers = CreateRowHint(rowGo.transform, "RowHintPlayers");
+        Text rowHintLanes = CreateRowHint(lanesRowGo.transform, "RowHintLanes");
+        Text rowHintStart = CreateRowHint(startRowGo.transform, "RowHintStart");
 
         // Only the first page starts visible — StartScreenController swaps
         // active pages at runtime (see UpdateCarousel).
@@ -3649,7 +3639,9 @@ public static class SceneSetup
         so.FindProperty("lanesRowOutline").objectReferenceValue = lanesRowOutline;
         so.FindProperty("lanesRowBg").objectReferenceValue = lanesRowBg;
         so.FindProperty("controllerStatusText").objectReferenceValue = controllerStatus;
-        so.FindProperty("menuHelpText").objectReferenceValue = menuHelp;
+        so.FindProperty("rowHintPlayers").objectReferenceValue = rowHintPlayers;
+        so.FindProperty("rowHintLanes").objectReferenceValue = rowHintLanes;
+        so.FindProperty("rowHintStart").objectReferenceValue = rowHintStart;
         so.FindProperty("menuSelectionPlayer1Row").objectReferenceValue = menuSelectionPage.player1Row;
         so.FindProperty("menuSelectionPlayer2Row").objectReferenceValue = menuSelectionPage.player2Row;
         so.FindProperty("menuConfirmCountdownText").objectReferenceValue = menuConfirmCountdown;
@@ -3729,6 +3721,88 @@ public static class SceneSetup
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
         return go;
+    }
+
+    // Attract-screen playlist. Clips are picked up by scanning the folder for
+    // this prefix rather than being listed one by one, so adding or dropping a
+    // track is putting a file in or taking it out — no edit here, and no
+    // silently-missing clip if a name changes. Same convention
+    // AttachFrameAnimation uses for animation frames.
+    const string LoaderMusicFolder = "Assets/Audio/loader";
+    const string LoaderMusicPrefix = "LoaderMusic_";
+
+    // The attract screen always opens on this one; the rest of the playlist is
+    // random from the second track on, this one included (MenuMusicRotator's
+    // firstClip). Name only, without extension — matched against the clip
+    // names the folder scan returns.
+    const string LoaderMusicOpeningClip = "LoaderMusic_07_Balalaika";
+
+    static AudioClip[] LoadLoaderMusicClips()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:AudioClip", new[] { LoaderMusicFolder });
+        var clips = new System.Collections.Generic.List<AudioClip>();
+
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            string file = System.IO.Path.GetFileName(path);
+            if (!file.StartsWith(LoaderMusicPrefix, System.StringComparison.Ordinal))
+                continue;
+
+            AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip != null)
+                clips.Add(clip);
+        }
+
+        // Sorted so the array order is stable between rebuilds — FindAssets
+        // makes no ordering promise, and a shuffling playlist is still easier
+        // to reason about when the underlying list doesn't move around.
+        clips.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+        return clips.ToArray();
+    }
+
+    // How far every menu row's background runs past each side of the screen.
+    // Shared with CreateRowHint below, which measures in from the row's right
+    // edge and so has to know how much of that edge is off screen.
+    const float MenuRowBgOverhang = 80f;
+
+    // Per-row control hint on the main menu, to the right of the row's own
+    // options. Text is left blank here and filled at runtime — the copy
+    // depends on which controller was detected, which the editor can't know
+    // (StartScreenController.UpdateRowHints).
+    static Text CreateRowHint(Transform rowParent, string name)
+    {
+        // Anchored to the row's RIGHT edge, not its centre. The rows span the
+        // full screen plus MenuRowBgOverhang, so measuring in from that edge
+        // puts the hint a fixed margin inside the visible screen at ANY aspect
+        // ratio; a fixed offset from the centre would sail off the right edge
+        // the moment the screen is narrower than the 16:9 the cabinet uses.
+        const float RowHintWidth = 520f;
+        const float RowHintScreenMargin = 30f;
+
+        var go = new GameObject(name);
+        go.transform.SetParent(rowParent, false);
+        Text text = go.AddComponent<Text>();
+        text.font = GameFont;
+        text.fontSize = 20;
+        text.fontStyle = FontStyle.Bold;
+        text.alignment = TextAnchor.MiddleLeft;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        // The lane row's hint runs to three lines and must not be clipped by
+        // Text's default Truncate.
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.color = new Color(0.9f, 0.9f, 0.9f);
+        text.text = string.Empty;
+        go.AddComponent<Outline>().effectColor = Color.black;
+
+        RectTransform rt = text.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 0.5f);
+        rt.anchorMax = new Vector2(1f, 0.5f);
+        rt.pivot = new Vector2(1f, 0.5f);
+        rt.sizeDelta = new Vector2(RowHintWidth, 110f);
+        rt.anchoredPosition = new Vector2(-(MenuRowBgOverhang + RowHintScreenMargin), 0f);
+
+        return text;
     }
 
     static void CreatePageTitle(Transform parent, string text, Color color)
@@ -5874,11 +5948,71 @@ public static class SceneSetup
         debugHintRt.sizeDelta = new Vector2(1400f, 60f);
         debugHintRt.anchoredPosition = new Vector2(0f, -480f);
 
+        // Attract-mode music: 8-bit styled tracks, shuffled, playing right
+        // through until someone actually starts a game. Same MenuMusicRotator
+        // the start screen uses (random pick, never the same track twice in a
+        // row) — nothing about it is menu-specific.
+        //
+        // Lives under the loader's own canvas on purpose: the controller sits
+        // on a separate object and keeps running so it can watch for the key
+        // being released, while the canvas going inactive during a game's
+        // intro takes the AudioSource down with it. Belt and braces with
+        // LoaderScreenController's explicit StopRotating() — see there.
+        var loaderMusicGo = new GameObject("LoaderMusic");
+        loaderMusicGo.transform.SetParent(canvasGo.transform, false);
+        AudioSource loaderMusicSource = loaderMusicGo.AddComponent<AudioSource>();
+        loaderMusicSource.playOnAwake = false;
+        loaderMusicSource.volume = 0.5f;
+        loaderMusicSource.loop = false;
+
+        AudioClip[] loaderMusicClips = LoadLoaderMusicClips();
+        if (loaderMusicClips.Length == 0)
+        {
+            Debug.LogWarning("[SceneSetup] No " + LoaderMusicPrefix + "* clips under "
+                + LoaderMusicFolder + " — the attract screen will be silent.");
+        }
+
+        AudioClip loaderOpeningClip = null;
+        foreach (AudioClip clip in loaderMusicClips)
+        {
+            if (clip.name == LoaderMusicOpeningClip)
+            {
+                loaderOpeningClip = clip;
+                break;
+            }
+        }
+
+        if (loaderOpeningClip == null && loaderMusicClips.Length > 0)
+        {
+            Debug.LogWarning("[SceneSetup] Opening track " + LoaderMusicOpeningClip
+                + " not found in " + LoaderMusicFolder + " — the playlist will start on a random track.");
+        }
+
+        MenuMusicRotator loaderMusic = loaderMusicGo.AddComponent<MenuMusicRotator>();
+        SerializedObject loaderMusicSo = new SerializedObject(loaderMusic);
+        loaderMusicSo.FindProperty("source").objectReferenceValue = loaderMusicSource;
+        loaderMusicSo.FindProperty("firstClip").objectReferenceValue = loaderOpeningClip;
+        SerializedProperty loaderClipsProp = loaderMusicSo.FindProperty("clips");
+        loaderClipsProp.arraySize = loaderMusicClips.Length;
+        for (int i = 0; i < loaderMusicClips.Length; i++)
+            loaderClipsProp.GetArrayElementAtIndex(i).objectReferenceValue = loaderMusicClips[i];
+        loaderMusicSo.ApplyModifiedPropertiesWithoutUndo();
+
+        // Printed on every rebuild, not just on failure. The first attempt at
+        // this playlist came out silent for a reason nothing on screen could
+        // explain: Rebuild Scene had been invoked before Unity finished
+        // recompiling, so the menu item ran the previous assembly, which had
+        // no music in it at all. A plain count in the Console makes that
+        // visible immediately — no line here means the rebuild was stale.
+        Debug.Log("[SceneSetup] Loader playlist: " + loaderMusicClips.Length + " track(s), opens on "
+            + (loaderOpeningClip != null ? loaderOpeningClip.name : "a random track"));
+
         var loaderManagerGo = new GameObject("LoaderScreenManager");
         LoaderScreenController loader = loaderManagerGo.AddComponent<LoaderScreenController>();
         SerializedObject loaderSo = new SerializedObject(loader);
         loaderSo.FindProperty("canvasRoot").objectReferenceValue = canvasGo;
         loaderSo.FindProperty("messageText").objectReferenceValue = messageText;
+        loaderSo.FindProperty("music").objectReferenceValue = loaderMusic;
 
         // Index-matched to LoaderScreenController's own gameStartKeys (keys
         // 1-7) — all 7 now have their own themed falling-object screen (see
