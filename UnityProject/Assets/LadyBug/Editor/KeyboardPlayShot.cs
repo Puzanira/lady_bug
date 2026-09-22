@@ -7,28 +7,50 @@ using UnityEngine;
 namespace LadyBug
 {
 
-// Batch verification still for the arcade integration: proves the game is
-// playable from the keyboard on a machine with NO Arduino board attached.
-// Opens the Main scene, enters play mode, waits for the menu, confirms the
-// default КЛАВИАТУРА selection by invoking the same BeginGame the menu's
-// Space/Enter press calls, lets gameplay run a couple of seconds, then
-// renders the main camera to an offscreen texture and writes the PNG given
-// by -shotPath. Exits 0 on success, non-zero on any failure. Invoked via
+// Batch verification still for the arcade integration: opens the Main scene,
+// enters play mode, drives the game to the screen a given -shotMode names, then
+// renders the main camera to an offscreen texture and writes the PNG given by
+// -shotPath. Exits 0 on success, non-zero on any failure. Invoked via
 // -executeMethod LadyBug.KeyboardPlayShot.Capture (batchmode, no -quit —
 // this tool exits the editor itself).
+//
+// It photographs the game AS THE CABINET RUNS IT — i.e. inside the launcher.
+// That is not a detail: run standalone, the loader's attract screen (canvas
+// sortingOrder 230, full screen) sits on top of everything and only stands aside
+// once somebody holds one of its keys for five seconds. The game starts UNDER it
+// regardless, so every mode used to come back with the same photo of the attract
+// screen — menu, gameplay and finale alike — a still that looks fine and proves
+// nothing about what it claims to show.
+//
+// The game already has one honest way out of that, and it is the way the cabinet
+// itself uses: inside the arcade launcher LoaderScreenController hides its canvas
+// in Awake and disables itself, and StartScreenController brings the menu up
+// without waiting for an IntroSequence that will never finish
+// (ArcadeControlsReader.InsideArcadeLauncher). So instead of reaching into the
+// scene and switching objects off — a test-only path through the game that no
+// player would ever take — this tool makes the game's own probe find a facade:
+// ArcadeLauncherStub.Install() supplies an editor-only, neutral-valued
+// AiGameStudio.ArcadeControls.ArcadeInput. Not a line of game code knows this
+// tool exists; the game takes the same branch it takes on the real cabinet.
+//
+// -shotMode attract skips the stub on purpose, so the standalone behaviour the
+// author wrote — the attract screen really being there, first frame to last — can
+// be photographed too, and stays provable after every upstream merge.
 public static class KeyboardPlayShot
 {
     private static int _phase;
     private static double _phaseStart;
     private static string _outPath;
-    // "gameplay" (default, historical behaviour) | "menu" | "final".
-    // menu  — shoot the pre-game screen without ever confirming.
-    // final — confirm, run, then force the win trigger and shoot the finale
-    //         after -shotDelay seconds, so the celebration FX (the author's
-    //         new Resources/Celebration PNG sequences) are on screen.
+    // "gameplay" (default) | "menu" | "final" | "attract".
+    // menu    — shoot the pre-game menu without ever confirming.
+    // final   — confirm, run for -shotDelay seconds, force the win trigger, then
+    //           WAIT for the run-results screen (ИТОГИ ЗАБЕГА) to actually come up
+    //           and shoot that. -shotDelay does not time the finale: see phase 4.
+    // attract — shoot the standalone loader/attract screen (no launcher stub).
     private static string _mode = "gameplay";
     private static double _shotDelay = 2.5;
     private static double _menuSettle = 1.5;
+    private static WinSequence _winSequence;
     private static bool _restoreEnterPlayOptions;
     private static EnterPlayModeOptions _savedOptions;
     private static bool _savedOptionsEnabled;
@@ -47,6 +69,21 @@ public static class KeyboardPlayShot
         {
             _shotDelay = parsed;
             _menuSettle = parsed;
+        }
+
+        // Every mode but "attract" photographs the game as the cabinet runs it —
+        // inside the launcher, where the attract screen stands aside by itself.
+        // See the class comment for why this is the only honest way to get past it.
+        if (_mode != "attract")
+        {
+            ArcadeLauncherStub.Install();
+            Debug.Log("[KeyboardPlayShot] arcade launcher facade installed for this session: "
+                      + "the game will take its in-cabinet branch (attract screen stands aside).");
+        }
+        else
+        {
+            Debug.Log("[KeyboardPlayShot] attract mode: no launcher facade — "
+                      + "photographing the standalone boot screen the author wrote.");
         }
 
         // Keep statics (this state machine, its delegates) alive across the
@@ -77,6 +114,8 @@ public static class KeyboardPlayShot
             case 0: // waiting for play mode
                 if (EditorApplication.isPlaying)
                 {
+                    if (!VerifyAttractScreenState())
+                        break;
                     _phase = 1;
                     _phaseStart = now;
                 }
@@ -88,8 +127,17 @@ public static class KeyboardPlayShot
             // PreGameScreenTiming.PageDwellSeconds (7s), so a shot taken earlier
             // shows a legitimately empty middle of the screen.
             case 1:
-                if (now - _phaseStart > (_mode == "menu" ? _menuSettle : 1.5))
+                if (now - _phaseStart > (_mode == "menu" || _mode == "attract" ? _menuSettle : 1.5))
                 {
+                    if (_mode == "attract")
+                    {
+                        // The boot screen IS the subject here; the menu is still behind it.
+                        Debug.Log("[KeyboardPlayShot] attract mode: capturing the loader screen.");
+                        WriteShot();
+                        _phase = 3;
+                        break;
+                    }
+
                     var menu = Object.FindAnyObjectByType<StartScreenController>();
                     if (menu == null)
                         Fail(3, "StartScreenController not found in play mode");
@@ -133,8 +181,9 @@ public static class KeyboardPlayShot
                         if (win == null)
                             Fail(3, "WinSequence not found in play mode");
                         win.TryTrigger(9999f);
-                        Debug.Log("[KeyboardPlayShot] final mode: win triggered, holding "
-                                  + _shotDelay + "s before the still.");
+                        _winSequence = win;
+                        Debug.Log("[KeyboardPlayShot] final mode: win triggered; "
+                                  + "waiting for ИТОГИ ЗАБЕГА to actually come up.");
                         _phase = 4;
                         _phaseStart = now;
                         break;
@@ -145,14 +194,100 @@ public static class KeyboardPlayShot
                 }
                 break;
 
-            case 4: // finale playing out
-                if (now - _phaseStart > _shotDelay)
+            // Finale playing out. The recap is NOT at a fixed offset from the trigger:
+            // the win first offers a few seconds to carry on (ContinueCountdownStart),
+            // then plays ФИНИШ, fades the road's creatures out, flies the bugs away and
+            // only then raises ИТОГИ ЗАБЕГА. A blind "hold N seconds" here is what made
+            // this mode photograph the flight and call it the finale. Wait for the recap
+            // itself to be on screen; the global watchdog turns a finale that never
+            // arrives into a failed run instead of a wrong picture.
+            case 4:
+                if (RecapIsOnScreen())
+                {
+                    Debug.Log("[KeyboardPlayShot] final mode: ИТОГИ ЗАБЕГА is up, settling "
+                              + RecapSettleSeconds + "s before the still.");
+                    _phase = 5;
+                    _phaseStart = now;
+                }
+                break;
+
+            case 5: // recap up — let its first page lay itself out, then shoot
+                if (now - _phaseStart > RecapSettleSeconds)
                 {
                     WriteShot();
                     _phase = 3;
                 }
                 break;
         }
+    }
+
+    // How long to let the results page settle once it appears: its rows/icons are
+    // filled in over the frames right after the backdrop goes up.
+    private const double RecapSettleSeconds = 1.0;
+
+    // True once the run-results screen (ИТОГИ ЗАБЕГА — WinSequence's statsBackdrop,
+    // the page that carries the run's stats and any new-record tags) is actually
+    // visible. Reached through the serialized field rather than an object name so a
+    // renamed GameObject in the generated scene cannot quietly turn this into "never".
+    private static bool RecapIsOnScreen()
+    {
+        if (_winSequence == null)
+            Fail(3, "WinSequence disappeared while the finale was playing");
+
+        FieldInfo backdropField = typeof(WinSequence)
+            .GetField("statsBackdrop", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (backdropField == null)
+            Fail(3, "WinSequence.statsBackdrop is gone — the results screen this mode "
+                    + "promises to photograph is found through it. Re-point KeyboardPlayShot "
+                    + "at whatever now carries ИТОГИ ЗАБЕГА.");
+
+        var backdrop = backdropField.GetValue(_winSequence) as GameObject;
+        if (backdrop == null)
+            Fail(3, "WinSequence has no statsBackdrop assigned in the scene — the results "
+                    + "screen cannot come up at all (Tools → Rebuild Scene?).");
+
+        return backdrop.activeInHierarchy;
+    }
+
+    // The failure this tool shipped with was silent: the attract screen covered the
+    // subject and the PNG still looked like a plausible picture of the game. So the
+    // first thing every run does, once play mode is live, is check that the screen it
+    // is about to photograph is the screen the mode promised — and die loudly if not.
+    // Returns false when the run has already been failed.
+    private static bool VerifyAttractScreenState()
+    {
+        bool insideLauncher = _mode != "attract";
+
+        if (insideLauncher && !ArcadeLauncherStub.GameSeesTheLauncher())
+        {
+            Fail(3, "the game does not see the arcade launcher facade in play mode — "
+                    + "the attract screen would cover every shot. See ArcadeLauncherStub.");
+            return false;
+        }
+
+        var loaders = Object.FindObjectsByType<LoaderScreenController>(FindObjectsInactive.Include);
+        foreach (LoaderScreenController loader in loaders)
+        {
+            bool standingAside = !loader.enabled;
+            if (insideLauncher && !standingAside)
+            {
+                Fail(3, "LoaderScreenController is still running inside the launcher: the attract "
+                        + "screen (sortingOrder 230) will sit on top of the shot. Its Awake is "
+                        + "supposed to stand it down when ArcadeControlsReader.InsideArcadeLauncher.");
+                return false;
+            }
+            if (!insideLauncher && standingAside)
+            {
+                Fail(3, "attract mode found no running LoaderScreenController — standalone, the "
+                        + "author's boot screen must still be there. Something disabled it outside "
+                        + "the launcher.");
+                return false;
+            }
+        }
+
+        Debug.Log("[KeyboardPlayShot] attract screen check passed (insideLauncher=" + insideLauncher
+                  + ", loaders=" + loaders.Length + ").");
+        return true;
     }
 
     private static void WriteShot()
