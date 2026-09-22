@@ -38,9 +38,22 @@ namespace AiGameStudio.ArcadeControls
     /// </summary>
     public sealed class StubControl
     {
-        public Vector2 Vector { get { return Vector2.zero; } }
-        public bool IsHeld { get { return false; } }
-        public float Value { get { return 0f; } }
+        // Written by editor tools/tests through LadyBug.ArcadeLauncherStub; read by the
+        // game through its own reflection probe, live, exactly like the real facade.
+        public Vector2 VectorValue;
+        public bool HeldValue;
+        public float RawValue;
+
+        public Vector2 Vector { get { return VectorValue; } }
+        public bool IsHeld { get { return HeldValue; } }
+        public float Value { get { return RawValue; } }
+
+        public void Reset()
+        {
+            VectorValue = Vector2.zero;
+            HeldValue = false;
+            RawValue = 0f;
+        }
     }
 
     /// <summary>
@@ -50,13 +63,20 @@ namespace AiGameStudio.ArcadeControls
     /// </summary>
     public static class ArcadeInput
     {
-        private static readonly StubControl Neutral = new StubControl();
+        public static StubControl Joystick { get; private set; }
+        public static StubControl RedButton { get; private set; }
+        public static StubControl GreenButton { get; private set; }
+        public static StubControl HeightA { get; private set; }
+        public static StubControl HeightB { get; private set; }
 
-        public static StubControl Joystick { get { return Neutral; } }
-        public static StubControl RedButton { get { return Neutral; } }
-        public static StubControl GreenButton { get { return Neutral; } }
-        public static StubControl HeightA { get { return Neutral; } }
-        public static StubControl HeightB { get { return Neutral; } }
+        static ArcadeInput()
+        {
+            Joystick = new StubControl();
+            RedButton = new StubControl();
+            GreenButton = new StubControl();
+            HeightA = new StubControl();
+            HeightB = new StubControl();
+        }
     }
 }
 
@@ -94,7 +114,11 @@ namespace LadyBug
             ResetReaderProbe();
 
             if (GameSeesTheLauncher())
+            {
+                Debug.Log("[ArcadeLauncherStub] the game bound to the stub facade through "
+                          + "AppDomain.AssemblyResolve — its own probe, its own code path.");
                 return;
+            }
 
             // Fallback for runtimes that refuse to satisfy an assembly reference from a
             // differently-named assembly: hand the reader its compiled getters directly.
@@ -150,13 +174,39 @@ namespace LadyBug
 
         private static void SeedReaderDelegates()
         {
+            Debug.Log("[ArcadeLauncherStub] assembly-resolve route refused by this runtime — "
+                      + "handing the reader its getters directly instead (same stub values).");
             Type reader = ReaderType();
             SetStatic(reader, "_probed", true);
-            SetStatic(reader, "_joystickVector", (Func<Vector2>)(() => Vector2.zero));
-            SetStatic(reader, "_redHeld", (Func<bool>)(() => false));
-            SetStatic(reader, "_greenHeld", (Func<bool>)(() => false));
-            SetStatic(reader, "_heightA", (Func<float>)(() => 0f));
-            SetStatic(reader, "_heightB", (Func<float>)(() => 0f));
+            SetStatic(reader, "_joystickVector",
+                (Func<Vector2>)(() => AiGameStudio.ArcadeControls.ArcadeInput.Joystick.Vector));
+            SetStatic(reader, "_redHeld",
+                (Func<bool>)(() => AiGameStudio.ArcadeControls.ArcadeInput.RedButton.IsHeld));
+            SetStatic(reader, "_greenHeld",
+                (Func<bool>)(() => AiGameStudio.ArcadeControls.ArcadeInput.GreenButton.IsHeld));
+            SetStatic(reader, "_heightA",
+                (Func<float>)(() => AiGameStudio.ArcadeControls.ArcadeInput.HeightA.Value));
+            SetStatic(reader, "_heightB",
+                (Func<float>)(() => AiGameStudio.ArcadeControls.ArcadeInput.HeightB.Value));
+        }
+
+        /// <summary>
+        /// Put every cabinet control back to neutral: stick centred, no button held,
+        /// both hands far from the height sensors. Tests call this between cases.
+        /// </summary>
+        public static void ResetControls()
+        {
+            AiGameStudio.ArcadeControls.ArcadeInput.Joystick.Reset();
+            AiGameStudio.ArcadeControls.ArcadeInput.RedButton.Reset();
+            AiGameStudio.ArcadeControls.ArcadeInput.GreenButton.Reset();
+            AiGameStudio.ArcadeControls.ArcadeInput.HeightA.Reset();
+            AiGameStudio.ArcadeControls.ArcadeInput.HeightB.Reset();
+        }
+
+        /// <summary>Deflect the cabinet stick (each axis -1..1, +y = up, +x = right).</summary>
+        public static void SetJoystick(Vector2 deflection)
+        {
+            AiGameStudio.ArcadeControls.ArcadeInput.Joystick.VectorValue = deflection;
         }
 
         private static void SetStatic(Type type, string field, object value)
