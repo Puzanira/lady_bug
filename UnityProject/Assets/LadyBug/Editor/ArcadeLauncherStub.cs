@@ -209,6 +209,18 @@ namespace LadyBug
             AiGameStudio.ArcadeControls.ArcadeInput.Joystick.VectorValue = deflection;
         }
 
+        /// <summary>Hold or release the cabinet's red button.</summary>
+        public static void SetRedButton(bool held)
+        {
+            AiGameStudio.ArcadeControls.ArcadeInput.RedButton.HeldValue = held;
+        }
+
+        /// <summary>Hold or release the cabinet's green button.</summary>
+        public static void SetGreenButton(bool held)
+        {
+            AiGameStudio.ArcadeControls.ArcadeInput.GreenButton.HeldValue = held;
+        }
+
         private static void SetStatic(Type type, string field, object value)
         {
             FieldInfo info = type.GetField(field, BindingFlags.NonPublic | BindingFlags.Static);
