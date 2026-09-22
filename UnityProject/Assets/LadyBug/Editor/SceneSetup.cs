@@ -6827,21 +6827,79 @@ public static class SceneSetup
         }
     }
 
-    // Black square with a bold red diagonal cross — placeholder for a
-    // leaderboard photo slot that has a real ranked entry but no photo was
-    // ever attached to it (distinct from no entry at all, which just hides
-    // the slot entirely — see TopResultsPage.Refresh).
+    // Placeholder for a leaderboard photo slot that has a real ranked entry
+    // but no photo was ever attached to it (distinct from no entry at all,
+    // which just hides the slot entirely — see TopResultsPage.RefreshTable).
+    //
+    // It used to be a black square with a bold red diagonal cross. That is the
+    // browser's "this image failed to load" glyph, pixel for pixel, so the
+    // screen read as a broken game — and it is not broken: the very same table
+    // loads and shows a real snapshot in any row that has one. The state being
+    // drawn here is ordinary ("this result was set before the camera ever took
+    // a picture"), so it gets an ordinary picture: an empty photo slot in the
+    // table's own dark tone, a quiet frame, and the head-and-shoulders
+    // silhouette every avatar field in the world uses for "no portrait".
+    // No lettering on purpose — a caption here would be one more string to
+    // keep in step with the wording pass the founder still has to approve.
     static Texture2D CreateNoPhotoTexture(int size)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
-        var pixels = new Color[size * size];
-        for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = new Color(0f, 0f, 0f, 1f);
 
-        float half = size * 0.03f; // was 0.05 — a bit thinner, per feedback
-        StampSolidLine(pixels, size, new Vector2(0f, 0f), new Vector2(size, size), half, Color.red);
-        StampSolidLine(pixels, size, new Vector2(0f, size), new Vector2(size, 0f), half, Color.red);
+        // Slot a shade lighter than the panel it sits on (46,46,56 — see
+        // CreateTopResultsPage's backdrop) so it reads as a place a photo
+        // belongs, rather than a hole cut in the page.
+        Color slot = new Color(0.235f, 0.235f, 0.285f, 1f);
+        Color frame = new Color(0.36f, 0.36f, 0.44f, 1f);
+        Color figure = new Color(0.45f, 0.45f, 0.54f, 1f);
+
+        float headR = size * 0.145f;
+        var head = new Vector2(size * 0.5f, size * 0.68f);
+        var bust = new Vector2(size * 0.5f, size * 0.30f);
+        float bustRx = size * 0.28f, bustRy = size * 0.20f;
+        float bustFloor = size * 0.10f;
+
+        float inset = size * 0.045f;
+        float thickness = size * 0.022f;
+
+        // 3x3 supersampling — the slot is drawn at roughly texel size on the
+        // 1920x1080 cabinet screen, so a hard-edged circle would show its
+        // stair steps at exactly the size it is displayed.
+        const int Sub = 3;
+        var pixels = new Color[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                int figHits = 0, frameHits = 0;
+                for (int sy = 0; sy < Sub; sy++)
+                {
+                    for (int sx = 0; sx < Sub; sx++)
+                    {
+                        float px = x + (sx + 0.5f) / Sub;
+                        float py = y + (sy + 0.5f) / Sub;
+
+                        float dxh = px - head.x, dyh = py - head.y;
+                        bool inHead = dxh * dxh + dyh * dyh <= headR * headR;
+
+                        float dxb = (px - bust.x) / bustRx, dyb = (py - bust.y) / bustRy;
+                        bool inDome = py >= bust.y && dxb * dxb + dyb * dyb <= 1f;
+                        bool inBody = py < bust.y && py >= bustFloor && Mathf.Abs(px - bust.x) <= bustRx;
+
+                        if (inHead || inDome || inBody)
+                            figHits++;
+
+                        float edge = Mathf.Min(Mathf.Min(px, size - px), Mathf.Min(py, size - py));
+                        if (edge >= inset && edge <= inset + thickness)
+                            frameHits++;
+                    }
+                }
+
+                const float total = Sub * Sub;
+                Color c = Color.Lerp(slot, frame, frameHits / total);
+                pixels[y * size + x] = Color.Lerp(c, figure, figHits / total);
+            }
+        }
 
         tex.SetPixels(pixels);
         tex.Apply();

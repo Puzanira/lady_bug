@@ -33,9 +33,12 @@ public class TopResultsPage : MonoBehaviour
     [SerializeField] private Text[] rowValueTexts;
     [SerializeField] private RawImage[] rowMedals;
     [SerializeField] private RawImage[] rowPhotos;
-    // Black square, red diagonal cross — shown in a photo slot that has a
-    // real ranked entry but no photo was ever attached to it, instead of
-    // just leaving the slot blank.
+    // Empty photo slot — a quiet frame and a head-and-shoulders silhouette,
+    // shown where a row has a real ranked entry but no photo was ever
+    // attached to it, instead of leaving the slot blank. Built by
+    // SceneSetup.CreateNoPhotoTexture; it used to be a black square with a
+    // red cross, which is the "image failed to load" glyph and made a
+    // perfectly healthy table look broken.
     [SerializeField] private Texture2D noPhotoTexture;
     [SerializeField] private GameObject[] rowArrowShafts;
     [SerializeField] private GameObject[] rowArrowHeads;
