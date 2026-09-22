@@ -30,14 +30,12 @@ public sealed class GestureSensorSerial : MonoBehaviour
     public int Player1LeftMm { get; private set; } = -1;
     public int Player1RightMm { get; private set; } = -1;
 
-    // Scaffold for an upcoming physical exit button on the controller —
-    // which pin/button isn't decided yet, so this isn't wired into
-    // ParseLine/the "G,..." wire protocol below at all yet and always
-    // reads false. Once the button is chosen, extend the firmware sketch's
-    // line format and set this from the new field — DuckToExitController
-    // already reacts to this going true the instant it's wired, no other
-    // changes needed there.
-    public bool ExitButtonPressed { get; private set; }
+    // No exit button on this board: the sketch behind it (GestureSensors.ino)
+    // sends nothing but "G,<left>,<right>", and the physical exit button ended
+    // up on the cabinet panel instead — read it from
+    // JoystickSerial.EscapeButtonDown, which is what DuckToExitController now
+    // does. A scaffold property used to sit here for it and could only ever
+    // read false.
 
     private Thread _thread;
     private volatile bool _stopRequested;
@@ -225,10 +223,27 @@ public sealed class GestureSensorSerial : MonoBehaviour
                         line.Length = 0;
                         if (trimmed == "BOARD,GESTURE_SENSORS")
                             return true;
-                        // Combined / joystick board — not ours; bail immediately so
-                        // JoystickSerial can probe the same port without waiting.
-                        if (trimmed == "BOARD,JOYSTICK" || trimmed.StartsWith("J,"))
+                        // Combined / joystick / cabinet-panel board — not ours; bail
+                        // immediately so JoystickSerial can probe the same port
+                        // without waiting. This matters more than it looks: the whole
+                        // probe runs inside MacSerialPort.ProbeLock, so sitting out
+                        // the full identificationTimeout here blocks the other
+                        // reader's probing too, not just this one's.
+                        //
+                        // The cabinet panel needs both of its own checks. It answers
+                        // the handshake with "BOARD,CABINET_PANEL", and if that reply
+                        // is missed (flushed, or the board was already mid-cycle when
+                        // we opened the port) its "C,..." line arrives within one
+                        // poll anyway. Its data line can't be used for this: it also
+                        // sends "G,..." lines, which is exactly what a real
+                        // sensor board sends.
+                        if (trimmed == "BOARD,JOYSTICK"
+                            || trimmed == "BOARD,CABINET_PANEL"
+                            || trimmed.StartsWith("J,")
+                            || trimmed.StartsWith("C,"))
+                        {
                             return false;
+                        }
                     }
                     else if (c != '\r')
                     {

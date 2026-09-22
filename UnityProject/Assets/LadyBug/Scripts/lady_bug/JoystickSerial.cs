@@ -26,6 +26,14 @@ namespace LadyBug
 // own comment) so a change to one board's plumbing can't accidentally affect
 // the other, and so both boards can be plugged in and identified
 // independently at the same time.
+//
+// A third board also ends up here: the arcade cabinet's own panel, which
+// puts every control on one Nano (Arduino/"Yandex (1).ino" — joystick, hand
+// sensors, crank and 4 buttons). It answers the handshake with
+// "BOARD,CABINET_PANEL", a string neither reader knows, but its joystick
+// line is byte-for-byte CombinedBoard's, so IsJoystickDataLine adopts the
+// port anyway. On top of that line it sends a "C,..." one carrying the
+// crank and the panel buttons — see ParsePanelFields.
 public sealed class JoystickSerial : MonoBehaviour
 {
     public static JoystickSerial Instance { get; private set; }
@@ -46,17 +54,89 @@ public sealed class JoystickSerial : MonoBehaviour
     public int HandLeftMm { get; private set; } = -1;
     public int HandRightMm { get; private set; } = -1;
 
+    // Cabinet panel buttons, from its "C,..." line. Stay false on the joystick
+    // and combined boards, which never send that line — check HasPanelButtons
+    // before reading them rather than treating "nothing pressed" as "no panel".
+    // Nothing consumes these yet: this is the parsing half only, so that the
+    // game side can be wired up against real data later.
+    public bool HasPanelButtons { get; private set; }
+    public bool RedButton { get; private set; }
+    public bool GreenButton { get; private set; }
+    public bool EscapeButton { get; private set; }
+
+    // Just-pressed edges of the three above, true for the single frame the
+    // press starts on — same held/just-pressed pair shape JoystickInput builds
+    // for the stick directions. Holding a button gives exactly one edge and no
+    // auto-repeat, which is what every consumer of these wants: they all
+    // trigger a screen change (quit dialog, start, continue, skip).
+    public bool RedButtonDown { get; private set; }
+    public bool GreenButtonDown { get; private set; }
+    public bool EscapeButtonDown { get; private set; }
+
+    // No board of any kind on the other end of a port. The same question
+    // StartScreenController.IsHardwareConnected asks, kept here in one place
+    // and asked negatively, because that is the form the Esc fallback below
+    // needs.
+    public static bool NoBoardConnected =>
+        (Instance == null || !Instance.IsConnected)
+        && (GestureSensorSerial.Instance == null || !GestureSensorSerial.Instance.IsConnected);
+
+    // The cabinet's SYSTEM button, with Esc standing in for it whenever no
+    // board is connected at all. Three screens need this same answer — the
+    // run's quit dialog, training, and the menu's way back to the loader — so
+    // it lives here rather than being spelled out at each of them.
+    //
+    // Esc is deliberately gated on there being no hardware: with the cabinet
+    // plugged in, SYSTEM is the button for this and a stray keypress on a
+    // keyboard nobody is looking at should not back players out of a game.
+    //
+    // Inside the hub this is flatly false, and that is a contract, not a tuning
+    // choice: on the cabinet the way out of a game is the touch «меню» button, which
+    // the launcher handles itself — the game is not supposed to know it exists. Both
+    // halves above would otherwise leak in. EscapeButtonDown stays false because the
+    // facade publishes no system button (ApplyArcadePanelButtons), but the Esc half
+    // is only held off by both readers reporting themselves connected, which is not
+    // true on the very first frames before their Update has run. A stray Esc there
+    // would back the player out to lady_bug's own attract screen on top of the
+    // launcher. Said once, here, rather than at each of the three call sites.
+    public static bool SystemMenuDown =>
+        !ArcadeControlsReader.Available
+        && ((Instance != null && Instance.EscapeButtonDown)
+            || (NoBoardConnected && Input.GetKeyDown(KeyCode.Escape)));
+
     private Thread _thread;
     private volatile bool _stopRequested;
     private volatile bool _connected;
     private readonly object _lock = new object();
     private readonly int[] _latest = { 0, 0, 0, 0 };
     private readonly int[] _latestHands = { -1, -1 };
+    private readonly int[] _latestPanelButtons = { 0, 0, 0 };
     private bool _hasNewValues;
     private bool _hasNewHandValues;
+    private bool _hasNewPanelButtons;
+    private bool _prevRedButton;
+    private bool _prevGreenButton;
+    private bool _prevEscapeButton;
     private bool _wasConnected;
     private float _lastHandValuesTime;
     private const float HandValuesStaleSeconds = 0.5f;
+
+    // Cabinet panel line: "C,<crank>,<red>,<green>,<action>,<system>" — six
+    // fields counting the "C" tag. Kept as named indices because which
+    // physical button sits on which pin is the one thing here that can still
+    // move: the firmware header says as much ("ЕСЛИ на стойке подписи иные —
+    // поменяй define'ы").
+    private const int PanelFieldCount = 6;
+    private const int PanelRedField = 2;
+    private const int PanelGreenField = 3;
+    // The panel has two buttons besides red and green: ACTION («!») on field 4
+    // and SYSTEM («меню») on field 5, in the firmware's own mapping. The
+    // cabinet's exit button is SYSTEM — confirmed by the project owner, not
+    // inferred; nothing in the repository records it, since the loader's panel
+    // diagram (Sprites/loader/ControlPanelDiagram.png) draws only the white,
+    // red and green buttons. Should the panel ever be re-wired, make this 4 for
+    // ACTION — the index is not repeated anywhere else.
+    private const int PanelEscapeField = 5;
 
     private void Awake()
     {
@@ -101,6 +181,7 @@ public sealed class JoystickSerial : MonoBehaviour
         if (UseArcadeFacade)
         {
             ApplyArcadeJoystick();
+            UpdatePanelButtonEdges();
             return;
         }
 
@@ -108,7 +189,10 @@ public sealed class JoystickSerial : MonoBehaviour
         IsConnected = connected;
 
         if (!connected && _wasConnected)
+        {
             ClearHandReadings();
+            ClearPanelButtons();
+        }
 
         _wasConnected = connected;
 
@@ -130,7 +214,17 @@ public sealed class JoystickSerial : MonoBehaviour
                 HandRightMm = _latestHands[1];
                 _lastHandValuesTime = Time.realtimeSinceStartup;
             }
+
+            if (_hasNewPanelButtons)
+            {
+                _hasNewPanelButtons = false;
+                RedButton = _latestPanelButtons[0] != 0;
+                GreenButton = _latestPanelButtons[1] != 0;
+                EscapeButton = _latestPanelButtons[2] != 0;
+            }
         }
+
+        UpdatePanelButtonEdges();
 
         if (HasHandSensors
             && connected
@@ -160,12 +254,81 @@ public sealed class JoystickSerial : MonoBehaviour
         HasHandSensors = true;
         HandLeftMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightA);
         HandRightMm = ArcadeControlsReader.HeightToSensorMm(ArcadeControlsReader.HeightB);
+
+        ApplyArcadePanelButtons();
+    }
+
+    /// <summary>
+    /// The cabinet's red and green, delivered by the hub instead of by this class's
+    /// own "C,…" parser.
+    ///
+    /// The parser above is the author's, written for a panel he has never had in
+    /// front of him — the board is ours, and inside the hub the arcade-controls
+    /// package is the thing that actually talks to it. So on the cabinet not one
+    /// line of ParsePanelFields runs: the port is never opened, no "C,…" ever
+    /// arrives, and every consumer the author wired up this update (the quit
+    /// dialog's ДА/НЕТ, the green confirm on the start row, the 10 km continue
+    /// prompt, skipping a recap page) would sit dead with the buttons physically
+    /// under the player's hand. Filling the same four fields off the facade is what
+    /// keeps his game-side wiring working here, without the game owning the port.
+    ///
+    /// Outside the cabinet the facade does not exist, this never runs, and his
+    /// panel parsing is the only source — exactly as he wrote it.
+    /// </summary>
+    private void ApplyArcadePanelButtons()
+    {
+        // The hub only publishes the two PLAYER buttons. There is deliberately no
+        // EscapeButton here: the cabinet's way out of a game is the touch «меню»
+        // button, and the hub — not the game — owns it. Leaving this false is what
+        // keeps SystemMenuDown false in the hub, so the game never opens its own
+        // quit dialog or backs itself out to its own attract screen inside the
+        // launcher. See StartScreenController.ReturnToLoaderScreen.
+        HasPanelButtons = true;
+        RedButton = ArcadeControlsReader.RedHeld;
+        GreenButton = ArcadeControlsReader.GreenHeld;
+        EscapeButton = false;
+    }
+
+    // Held states -> single-frame edges. Every frame, not just on frames a fresh
+    // line landed: the held states only change when one does, so comparing against
+    // last frame's value is what turns them into edges. Shared by the serial path
+    // and the facade path, so the two cannot drift.
+    private void UpdatePanelButtonEdges()
+    {
+        RedButtonDown = RedButton && !_prevRedButton;
+        _prevRedButton = RedButton;
+
+        GreenButtonDown = GreenButton && !_prevGreenButton;
+        _prevGreenButton = GreenButton;
+
+        EscapeButtonDown = EscapeButton && !_prevEscapeButton;
+        _prevEscapeButton = EscapeButton;
     }
 
     private void ClearHandReadings()
     {
         HandLeftMm = -1;
         HandRightMm = -1;
+    }
+
+    // Let go of every button when the board goes away, so a press that was
+    // being held at the moment the cable was pulled doesn't stay latched.
+    private void ClearPanelButtons()
+    {
+        RedButton = false;
+        GreenButton = false;
+        EscapeButton = false;
+
+        RedButtonDown = false;
+        GreenButtonDown = false;
+        EscapeButtonDown = false;
+
+        // Cleared alongside the states themselves, so the held/previous pair
+        // stays consistent: a button that was down when the cable was pulled
+        // must not read as a fresh press when the board comes back.
+        _prevRedButton = false;
+        _prevGreenButton = false;
+        _prevEscapeButton = false;
     }
 
     private void RunLoop()
@@ -307,7 +470,9 @@ public sealed class JoystickSerial : MonoBehaviour
 
             _connected = true;
             HasHandSensors = false;
+            HasPanelButtons = false;
             ClearHandReadings();
+            ClearPanelButtons();
             Debug.Log("[JoystickSerial] Connected: " + portPath);
 
             StringBuilder line = new StringBuilder();
@@ -342,8 +507,16 @@ public sealed class JoystickSerial : MonoBehaviour
 
     // CombinedBoard: "G,<left_mm>,<right_mm>,J,<up>,<down>,<left>,<right>"
     // Standalone Joystick: "J,<up>,<down>,<left>,<right>" only.
+    // Cabinet panel: the same combined G+J line, plus "C,<crank>,<red>,
+    // <green>,<action>,<system>" once per cycle.
     private void ParseLine(string trimmedLine)
     {
+        if (trimmedLine.StartsWith("C,", StringComparison.Ordinal))
+        {
+            ParsePanelFields(trimmedLine);
+            return;
+        }
+
         if (trimmedLine.StartsWith("G,", StringComparison.Ordinal))
         {
             int jMarker = trimmedLine.IndexOf(",J,", StringComparison.Ordinal);
@@ -382,6 +555,35 @@ public sealed class JoystickSerial : MonoBehaviour
         {
             Array.Copy(values, _latest, 4);
             _hasNewValues = true;
+        }
+    }
+
+    // Only the three buttons the game was asked for are lifted out of the line.
+    // The crank and the spare fourth button are left unread on purpose — the
+    // field count is still checked in full, so a panel whose line shape
+    // changes stops being parsed instead of being misread.
+    private void ParsePanelFields(string trimmedLine)
+    {
+        if (!trimmedLine.StartsWith("C,", StringComparison.Ordinal))
+            return;
+
+        string[] fields = trimmedLine.Split(',');
+        if (fields.Length != PanelFieldCount)
+            return;
+
+        int[] values = new int[3];
+        if (!int.TryParse(fields[PanelRedField], out values[0])
+            || !int.TryParse(fields[PanelGreenField], out values[1])
+            || !int.TryParse(fields[PanelEscapeField], out values[2]))
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            HasPanelButtons = true;
+            Array.Copy(values, _latestPanelButtons, 3);
+            _hasNewPanelButtons = true;
         }
     }
 

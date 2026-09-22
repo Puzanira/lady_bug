@@ -37,7 +37,11 @@ public class StartScreenController : MonoBehaviour
     [SerializeField] private Image controllerRowBg;
 
     [SerializeField] private Text controllerStatusText;
-    [SerializeField] private Text menuHelpText;
+    // One hint per menu row, shown only while that row is selected — replaces
+    // the single bottom-right block that used to describe the whole menu.
+    [SerializeField] private Text rowHintPlayers;
+    [SerializeField] private Text rowHintLanes;
+    [SerializeField] private Text rowHintStart;
 
     // The two per-player rows on the ВЫБОР В МЕНЮ carousel page. Baked with
     // the keyboard mapping by SceneSetup (that page is built long before any
@@ -169,20 +173,40 @@ public class StartScreenController : MonoBehaviour
     // out further than they already run.
     private const int NoCarouselPage = -2; // sentinel distinct from _lastCarouselPage's initial -1
 
-    private const string MenuHelpStartBlock =
-        "\n\nНАЧАЛО:\n"
-        + "ВЫБРАТЬ СТАРТ ИЛИ ТРЕНИРОВКА\n"
-        + "И ДЕРЖАТЬ ВНИЗ 5 СЕК";
+    // Per-row hints. Arrows are U+2190…U+2193 (← → ↑ ↓) on purpose: ComicCAT,
+    // the font every UI element here uses, carries those four but NOT the
+    // solid triangles ◀ ▶ ▲ ▼ — checked against the font's own cmap. Those
+    // would come out as blank boxes on the cabinet, invisibly to anyone
+    // reading this code.
+    //
+    // Both value rows (players, lanes) carry the SAME two lines: what changes
+    // the value, and what moves off to another row. Nothing about "which way
+    // do I press" is obvious on a cabinet, and it is the same answer on both
+    // rows, so saying it twice beats making the player remember it.
+    //
+    // The hardware wording names the CONTROLS, not keyboard letters — on the
+    // cabinet there is no keyboard to look at. Up is a flap of both hands and
+    // down is a duck (GestureInput), which is why those two aren't spelled as
+    // "↑ ↓ датчики": the sensor gesture for each direction is a different
+    // motion and has to be named separately.
+    private const string RowHintValueKeyboard =
+        "← →  ИЗМЕНИТЬ — A D · J L\n"
+        + "↑ ↓  НА ДРУГУЮ СТРОКУ — W S · I K";
 
-    private const string MenuHelpHardware =
-        "ВЫБОР:\n"
-        + "ВВЕРХ · ВНИЗ · ВЛЕВО · ВПРАВО"
-        + MenuHelpStartBlock;
+    private const string RowHintValueHardware =
+        "← →  ИЗМЕНИТЬ — НАКЛОН РУК\n"
+        + "↑ ↓  НА ДРУГУЮ СТРОКУ — ВЗМАХ · ПРИСЕД\n"
+        + "ИЛИ ДЖОЙСТИК В ЭТИ ЖЕ СТОРОНЫ";
 
-    private const string MenuHelpKeyboard =
-        "ВЫБОР:\n"
-        + "WASD · IJKL"
-        + MenuHelpStartBlock;
+    // Начинается с «ВЫБОР» — эта строка не меняет значение, а подтверждает
+    // выбранное, и без слова подсказка читалась как ещё одна пара «чем
+    // переключать».
+    private const string RowHintStartHardware =
+        "ВЫБОР — ЗЕЛЁНАЯ КНОПКА\n"
+        + "ИЛИ ДАТЧИКИ ВЫСОТЫ ЗАЖАТЬ ВНИЗ НА 5 СЕК";
+
+    private const string RowHintStartKeyboard =
+        "ВЫБОР — ЗАЖАТЬ ВНИЗ НА 5 СЕК";
 
     // Rows on the ВЫБОР В МЕНЮ carousel page. Hardware wording matches the
     // УПРАВЛЕНИЕ page built by SceneSetup (ИГРОК 1 — ДАТЧИКИ, ИГРОК 2 —
@@ -203,6 +227,7 @@ public class StartScreenController : MonoBehaviour
 
     private float _menuDownHoldTimer;
     private bool _menuDownConfirmTriggered;
+    private bool _revealed;
     private bool _prevMenuDownHeld;
     private bool _menuHorizontalNavLocked;
     private float _joystickUpHoldTimer;
@@ -266,7 +291,6 @@ public class StartScreenController : MonoBehaviour
         HideLegacyControllerRow();
         EnsureLaneRowUI();
         EnsureControllerStatusText();
-        EnsureMenuHelpText();
         EnsureMenuConfirmCountdownText();
 
         if (_rightController != null)
@@ -335,6 +359,14 @@ public class StartScreenController : MonoBehaviour
     // what's actually on screen the instant it becomes visible.
     public void OnRevealed()
     {
+        // The one reliable "the menu is the screen now" signal: this canvas is
+        // active the whole time the loader and intro are up (they simply cover
+        // it, see SceneSetup's comment at CreateAllIntroScreens), so Update
+        // runs behind them and nothing else here distinguishes the two states.
+        // The exit button needs that distinction — on the attract screen it
+        // must not quit the cabinet's app.
+        _revealed = true;
+
         // Shows page 0 synchronously, right here, instead of just resetting
         // _lastCarouselPage and waiting for the next Update — Finish() (the
         // caller) makes this menu's own canvas visible immediately, in the
@@ -359,6 +391,26 @@ public class StartScreenController : MonoBehaviour
         if (trainingCanvasRoot != null && trainingCanvasRoot.activeSelf)
         {
             UpdateTrainingScreen();
+            return;
+        }
+
+        // SYSTEM button on the menu — or Esc, when no board is connected —
+        // backs out to the attract screen. It used to quit the application,
+        // on the reasoning that nothing sat above the menu; the loader lives
+        // in this same project, so there is somewhere to go back TO.
+        //
+        // Two gates, and both are load-bearing. _revealed keeps the attract
+        // screen safe: the loader and the intro merely COVER this canvas, so
+        // Update is already running behind them, and without it this would
+        // fire while the loader is the screen on show. IsRunning keeps the run
+        // safe: this script also keeps running with just its Canvas component
+        // disabled once the game starts (see BeginTraining's comment), where
+        // the button must open the quit dialog instead.
+        if (JoystickSerial.SystemMenuDown
+            && _revealed
+            && (SpeedController.Instance == null || !SpeedController.Instance.IsRunning))
+        {
+            ReturnToLoaderScreen();
             return;
         }
 
@@ -451,6 +503,15 @@ public class StartScreenController : MonoBehaviour
     // down all the way just takes you straight back to the menu.
     private void UpdateTrainingScreen()
     {
+        if (JoystickSerial.SystemMenuDown)
+        {
+            _trainingHoldTimer = 0f;
+            if (trainingExitCountdownText != null)
+                trainingExitCountdownText.gameObject.SetActive(false);
+            ExitTraining();
+            return;
+        }
+
         bool holding = AreAllActivePlayersHoldingTrainingExit();
 
         if (!holding)
@@ -518,6 +579,15 @@ public class StartScreenController : MonoBehaviour
     private void UpdateTrickCarousel()
     {
         UpdateCarouselGeneric(trickCarouselPages, trickCarouselBackground, ref _lastTrickPage, ref _trickPageDwellElapsed);
+
+        if (JoystickSerial.SystemMenuDown)
+        {
+            _trickExitHoldTimer = 0f;
+            if (trickCarouselExitCountdownText != null)
+                trickCarouselExitCountdownText.gameObject.SetActive(false);
+            ExitTrickCarouselToMenu();
+            return;
+        }
 
         bool holding = AreAllActivePlayersHoldingTrainingExit();
 
@@ -588,6 +658,8 @@ public class StartScreenController : MonoBehaviour
 
     private void UpdateVisuals()
     {
+        UpdateRowHints();
+
         bool oneSelected = _selectedPlayers == 1;
 
         // P1 = light ladybug on the left (sensors); P2 = dark on the right
@@ -997,6 +1069,24 @@ public class StartScreenController : MonoBehaviour
     // or CombinedBoard mm directly (see IsPlayerOneTrainingExitHeld).
     private const int TrainingSensorDownThresholdMm = 100; // GestureInput.DownThresholdMm
 
+    // Hands the screen back to attract mode. Stops the menu's own music
+    // first: the loader starts its playlist as it comes back up, and two
+    // rotators playing at once is just noise.
+    private void ReturnToLoaderScreen()
+    {
+        if (menuMusic != null)
+            menuMusic.StopRotating();
+
+        // Repack: FindFirstObjectByType, not the obsolete FindObjectOfType (CS0618
+        // in Unity 6 — the cabinet build is kept warning-clean). Include inactive:
+        // the loader's controller lives on its own object, but the search must not
+        // depend on that staying true.
+        LoaderScreenController loader =
+            FindFirstObjectByType<LoaderScreenController>(FindObjectsInactive.Include);
+        if (loader != null)
+            loader.ReturnToLoader();
+    }
+
     private bool AreAllActivePlayersHoldingTrainingExit()
     {
         if (_selectedPlayers == 1)
@@ -1206,16 +1296,38 @@ public class StartScreenController : MonoBehaviour
             return;
         }
 
+        // Nothing held and nothing was held last frame, so there is no hold in
+        // flight for the "already confirmed" latch to be protecting against —
+        // drop it. The latch is what stops a confirm from firing twice while
+        // the player is still holding down, and it is deliberately NOT cleared
+        // on the way back from training: whoever left by holding duck is still
+        // holding it as the menu reappears, and without the latch that hold
+        // would sail past 5 seconds and walk straight back into training. This
+        // row is the only place the latch can go stale, since the early return
+        // above clears it every frame on the other rows.
+        if (!held && !_prevMenuDownHeld && _menuDownConfirmTriggered)
+            ResetMenuDownHold();
+
+        // The cabinet's green button confirms the selected row outright — the
+        // 5-second hold stays as the path for keyboard, sensors and joystick.
+        // Only on this row, exactly like the hold: the rows above have nothing
+        // to confirm.
+        JoystickSerial panel = JoystickSerial.Instance;
+        if (!_menuDownConfirmTriggered && panel != null && panel.GreenButtonDown)
+        {
+            _menuDownConfirmTriggered = true;
+            ConfirmStartRow();
+            _prevMenuDownHeld = held;
+            return;
+        }
+
         if (held)
         {
             _menuDownHoldTimer += Time.deltaTime;
             if (!_menuDownConfirmTriggered && _menuDownHoldTimer >= MenuConfirmHold)
             {
                 _menuDownConfirmTriggered = true;
-                if (_selectedStartOption == 0)
-                    BeginGame();
-                else
-                    BeginTraining();
+                ConfirmStartRow();
             }
         }
         else if (_prevMenuDownHeld)
@@ -1234,6 +1346,16 @@ public class StartScreenController : MonoBehaviour
 
         UpdateMenuConfirmCountdown(held);
         _prevMenuDownHeld = held;
+    }
+
+    // Acting on the start row, whichever way it was confirmed — the hold or
+    // the panel's green button. One place, so the two paths can't drift.
+    private void ConfirmStartRow()
+    {
+        if (_selectedStartOption == 0)
+            BeginGame();
+        else
+            BeginTraining();
     }
 
     private void UpdateMenuConfirmCountdown(bool downHeld)
@@ -1552,6 +1674,29 @@ public class StartScreenController : MonoBehaviour
         _menuCombinedPrevLeanRightHeld = leanRightHeld;
     }
 
+    // Only the selected row's hint is on screen. Called from both UpdateVisuals
+    // (selection moved) and UpdateMenuHelpText (the detected controller
+    // changed, which rewrites the copy) — either can happen without the other.
+    private void UpdateRowHints()
+    {
+        string valueCopy = _useHardwareInput ? RowHintValueHardware : RowHintValueKeyboard;
+
+        ApplyRowHint(rowHintPlayers, 0, valueCopy);
+        ApplyRowHint(rowHintLanes, 1, valueCopy);
+        ApplyRowHint(rowHintStart, StartRowIndex, _useHardwareInput ? RowHintStartHardware : RowHintStartKeyboard);
+    }
+
+    private void ApplyRowHint(Text hint, int row, string copy)
+    {
+        if (hint == null)
+            return;
+
+        bool selected = _row == row;
+        hint.gameObject.SetActive(selected);
+        if (selected)
+            hint.text = copy;
+    }
+
     private void UpdateControllerStatusText()
     {
         if (controllerStatusText == null)
@@ -1572,8 +1717,7 @@ public class StartScreenController : MonoBehaviour
 
     private void UpdateMenuHelpText()
     {
-        if (menuHelpText != null)
-            menuHelpText.text = _useHardwareInput ? MenuHelpHardware : MenuHelpKeyboard;
+        UpdateRowHints();
 
         // Same switch on the upfront carousel page, so the instructions a
         // player reads before the menu match the hint under the menu itself.
@@ -1586,12 +1730,11 @@ public class StartScreenController : MonoBehaviour
                 ? MenuSelectionPlayer2Hardware : MenuSelectionPlayer2Keyboard;
     }
 
-    private static bool IsHardwareConnected()
-    {
-        bool sensorsConnected = GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.IsConnected;
-        bool combinedBoardConnected = JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected;
-        return sensorsConnected || combinedBoardConnected;
-    }
+    // Same question as JoystickSerial.NoBoardConnected, asked the other way
+    // round. Delegated rather than spelled out twice: the Esc-instead-of-
+    // SYSTEM fallback keys off the negative form, and two copies of "is there
+    // hardware" would eventually disagree.
+    private static bool IsHardwareConnected() => !JoystickSerial.NoBoardConnected;
 
     private void HideLegacyControllerRow()
     {
@@ -1673,25 +1816,11 @@ public class StartScreenController : MonoBehaviour
         ApplyControllerStatusLayout();
     }
 
-    private void EnsureMenuHelpText()
-    {
-        if (menuHelpText == null && canvasRoot != null)
-        {
-            Transform helpTransform = canvasRoot.transform.Find("MenuHelpText");
-            if (helpTransform != null)
-                menuHelpText = helpTransform.GetComponent<Text>();
-        }
-
-        if (menuHelpText == null)
-            return;
-
-        menuHelpText.fontSize = 20;
-        menuHelpText.fontStyle = FontStyle.Bold;
-        menuHelpText.alignment = TextAnchor.LowerRight; // bottom-right; swapped with the controller indicator
-        menuHelpText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        menuHelpText.verticalOverflow = VerticalWrapMode.Overflow;
-        menuHelpText.color = new Color(0.9f, 0.9f, 0.9f);
-    }
+    // The bottom-right MenuHelpText and its EnsureMenuHelpText() restyling
+    // pass are gone — the per-row hints replaced it, and SceneSetup builds
+    // those fully formed (CreateRowHint), so there is nothing to patch up at
+    // runtime. A scene built before this change still has the old object;
+    // Rebuild Scene clears it.
 
     private void EnsureMenuConfirmCountdownText()
     {

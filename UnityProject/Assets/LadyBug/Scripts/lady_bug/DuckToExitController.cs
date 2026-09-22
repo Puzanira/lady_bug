@@ -13,19 +13,19 @@ namespace LadyBug
 // raw down-input (IsDuckInputHeld), not duck pose — a collision resets the
 // visual duck but must not zero the silent phase while down stays held.
 //
-// A dedicated physical exit button is coming to the controller too (exact
-// button not chosen yet — see GestureSensorSerial.ExitButtonPressed) —
-// unlike the duck hold above, that one fires the same dialog instantly on
-// press, no hold/countdown. DebugExitKey stands in for it on a keyboard
-// until the real button's wired.
+// The cabinet panel's own exit button reaches the same dialog — it is the
+// SYSTEM button on that board (JoystickSerial.EscapeButtonDown, see the field
+// index note there) and, unlike the duck hold above, fires the dialog
+// instantly on press, with no hold or countdown. debugExitKey stays as the
+// keyboard stand-in for it, for working without the cabinet plugged in.
 public class DuckToExitController : MonoBehaviour
 {
     [SerializeField] private Text countdownText;
     [SerializeField] private float silentPhase = 5f;
     [SerializeField] private float countdownPhase = 5f;
 
-    // STUB — keyboard stand-in for GestureSensorSerial.ExitButtonPressed
-    // until the real hardware button exists. Swap/remove once it does.
+    // Keyboard stand-in for the cabinet's exit button, for developing without
+    // the panel plugged in.
     [SerializeField] private KeyCode debugExitKey = KeyCode.Backspace;
 
     private float _holdTimer;
@@ -40,8 +40,18 @@ public class DuckToExitController : MonoBehaviour
         if (PauseController.Instance != null && PauseController.Instance.IsDialogOpen)
             return; // already open — don't restack
 
+        // Red opens the question as well as the SYSTEM button does. That gives
+        // red two jobs, and they don't collide: outside the dialog it asks
+        // "quit?", inside it answers НЕТ (see PauseController). The press that
+        // opens the dialog is deliberately not readable by it on the same
+        // frame, or it would open and immediately cancel itself.
+        //
+        // SystemMenuDown already folds in Esc for the no-hardware case, so
+        // this path is reachable while developing without the cabinet.
+        JoystickSerial panel = JoystickSerial.Instance;
         bool exitButtonPressed = Input.GetKeyDown(debugExitKey)
-            || (GestureSensorSerial.Instance != null && GestureSensorSerial.Instance.ExitButtonPressed);
+            || JoystickSerial.SystemMenuDown
+            || (panel != null && panel.RedButtonDown);
         if (exitButtonPressed)
         {
             _holdTimer = 0f;
