@@ -32,6 +32,10 @@
       "baselineCount": 1
     },
     {
+      "file": "Scripts/lady_bug/JoystickSerial.cs",
+      "baselineCount": 1
+    },
+    {
       "file": "Scripts/lady_bug/GestureKeyIndicator.cs",
       "baselineCount": 1
     },
