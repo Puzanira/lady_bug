@@ -5902,18 +5902,21 @@ public static class SceneSetup
         panelRt.anchoredPosition = new Vector2(0f, 60f);
 
         // Layout matches ControlPanelDiagram.png's own 1600x420 source
-        // space: white button top-left above the 2 laser rangefinders
+        // space: жёлтая кнопка top-left above the 2 laser rangefinders
         // (датчики высоты — long red beam + a short pale "palm" crossing
         // it), joystick top-middle with a red/green button pair below it,
         // and a крутилка (a dial with a pointer) on the right — NOT the
         // wifi-style icon this used to be, per feedback that it reads as a
         // wireless icon rather than a physical twist-knob.
         //
-        // NOTE: the artwork still draws the top-left button WHITE while the
-        // cabinet's own sticker calls that one «жёлтая кнопка». The prompt
-        // above it (LoaderScreenController.Messages) names the three real
-        // colours; the PNG has not been redrawn.
-        GameObject buttonWhite = CreatePanelHighlight(panelGo.transform, "HighlightButtonWhite", panelWidth, panelHeight, 290f, 110f, 150f, 150f);
+        // The top-left button used to be drawn WHITE while the cabinet's own
+        // sticker calls it «жёлтая кнопка» — the prompt above the diagram
+        // (LoaderScreenController.Messages) named three colours and the
+        // picture showed two of them. The PNG has been repainted: that ball
+        // is now yellow, in the same three flat tones the red and green ones
+        // use (ring 18,18,18 · body · body+40 highlight). Keep it yellow —
+        // the stickers on the real panel are already printed.
+        GameObject buttonYellow = CreatePanelHighlight(panelGo.transform, "HighlightButtonYellow", panelWidth, panelHeight, 290f, 110f, 150f, 150f);
         GameObject rangefinder1 = CreatePanelHighlight(panelGo.transform, "HighlightRangefinder1", panelWidth, panelHeight, 200f, 300f, 130f, 180f);
         GameObject rangefinder2 = CreatePanelHighlight(panelGo.transform, "HighlightRangefinder2", panelWidth, panelHeight, 380f, 300f, 130f, 180f);
         GameObject joystick = CreatePanelHighlight(panelGo.transform, "HighlightJoystick", panelWidth, panelHeight, 760f, 150f, 170f, 220f);
@@ -6073,7 +6076,7 @@ public static class SceneSetup
 
         SerializedProperty buttonProp = loaderSo.FindProperty("buttonHighlights");
         buttonProp.arraySize = 3;
-        buttonProp.GetArrayElementAtIndex(0).objectReferenceValue = buttonWhite;
+        buttonProp.GetArrayElementAtIndex(0).objectReferenceValue = buttonYellow;
         buttonProp.GetArrayElementAtIndex(1).objectReferenceValue = buttonRed;
         buttonProp.GetArrayElementAtIndex(2).objectReferenceValue = buttonGreen;
 

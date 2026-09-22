@@ -133,7 +133,7 @@ public sealed class JoystickSerial : MonoBehaviour
     // and SYSTEM («меню») on field 5, in the firmware's own mapping. The
     // cabinet's exit button is SYSTEM — confirmed by the project owner, not
     // inferred; nothing in the repository records it, since the loader's panel
-    // diagram (Sprites/loader/ControlPanelDiagram.png) draws only the white,
+    // diagram (Sprites/loader/ControlPanelDiagram.png) draws only the yellow,
     // red and green buttons. Should the panel ever be re-wired, make this 4 for
     // ACTION — the index is not repeated anywhere else.
     private const int PanelEscapeField = 5;
