@@ -221,6 +221,23 @@ namespace LadyBug
             AiGameStudio.ArcadeControls.ArcadeInput.GreenButton.HeldValue = held;
         }
 
+        /// <summary>
+        /// Put the two cabinet height sensors at a reading, in the package's own 0..1 where
+        /// BIGGER means the hand is CLOSER (see ArcadeControlsReader.HeightA). 0 is what the
+        /// real boards produce with no hand over the sensor at all
+        /// (SerialParsers.HeightMmToNormalized returns 0 for a no-target reading).
+        ///
+        /// Needed because the cabinet hands the player to this game WITH a hand already over
+        /// a sensor: game.json declares HeightA/HeightB as lady_bug's controls, so the hub's
+        /// hold-to-launch fill is driven by holding a hand there. A test that only ever sees
+        /// both sensors at 0 never photographs the state the menu actually opens in.
+        /// </summary>
+        public static void SetHeights(float a, float b)
+        {
+            AiGameStudio.ArcadeControls.ArcadeInput.HeightA.RawValue = a;
+            AiGameStudio.ArcadeControls.ArcadeInput.HeightB.RawValue = b;
+        }
+
         private static void SetStatic(Type type, string field, object value)
         {
             FieldInfo info = type.GetField(field, BindingFlags.NonPublic | BindingFlags.Static);

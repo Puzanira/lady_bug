@@ -29,6 +29,25 @@ public class JoystickInput : MonoBehaviour
     public bool RightHeld { get; private set; }
     public bool RightDown { get; private set; }
 
+    // Nothing ticks a switched-off component, so without this every flag above keeps
+    // the value it happened to hold at the moment it was switched off — and a wrapper
+    // switched off mid-deflection goes on reporting a direction held for the rest of
+    // the session. The menu deactivates PlayerRight the instant 1 ИГРОК is chosen, and
+    // that choice is made by pushing the stick sideways, so this was not a corner case:
+    // it is the ordinary way through the menu. GestureInput already clears itself the
+    // same way in its own OnDisable; this is the matching half for the stick.
+    private void OnDisable()
+    {
+        UpHeld = false;
+        UpDown = false;
+        DownHeld = false;
+        DownDown = false;
+        LeftHeld = false;
+        LeftDown = false;
+        RightHeld = false;
+        RightDown = false;
+    }
+
     private void Update()
     {
         JoystickSerial joystick = JoystickSerial.Instance;

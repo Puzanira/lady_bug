@@ -239,7 +239,24 @@ public class StartScreenController : MonoBehaviour
     private bool _menuDownConfirmTriggered;
     private bool _revealed;
     private bool _prevMenuDownHeld;
-    private bool _menuHorizontalNavLocked;
+
+    // Two latches for the horizontal axis, not one — and that is the whole point.
+    //
+    // Both families of horizontal input have to be de-bounced (one lean / one push of
+    // the stick = one step, not a repeat every frame), but they must be de-bounced
+    // SEPARATELY. While they shared a latch, ANY source that never let go pinned the
+    // whole axis: the latch only cleared once nothing at all was held, so one stuck
+    // reading disabled every other way of changing a row value.
+    //
+    // That is not hypothetical, it is how the cabinet starts this game. game.json
+    // declares lady_bug's controls as HeightA/HeightB, so the hub's hold-to-launch is
+    // driven by holding a hand over a height sensor — the menu therefore opens with
+    // one hand over one sensor and nothing over the other, which reads as a lean that
+    // is held forever. Founder's live report: «нельзя выбрать режим с 2 игроками
+    // сейчас и тренировку» — both are the right-hand option of their row, and with
+    // the axis pinned neither direction of the stick moved anything at all.
+    private bool _menuHorizontalNavLocked;       // menu keys + the height sensors
+    private bool _menuStickHorizontalNavLocked;  // the cabinet stick, on its own
     private float _joystickUpHoldTimer;
     // Reset alongside the other joystick-hold state but never read back — kept as
     // the author left it so the next upstream merge has nothing to reconcile.
@@ -468,8 +485,12 @@ public class StartScreenController : MonoBehaviour
         right |= IsLeanRightDown(gestureRight) || IsLeanRightDown(gestureLeft);
         up |= IsFlapDown(gestureRight) || IsFlapDown(gestureLeft);
         AppendMenuCombinedBoardNav(ref left, ref right, ref up);
-        AppendMenuJoystickNav(ref left, ref right);
+        // De-bounce the sensor/key family BEFORE the stick joins in, and let the stick
+        // de-bounce itself inside AppendMenuJoystickNav. Merging first and locking once
+        // afterwards is exactly what let a permanently-held lean swallow the stick —
+        // see the two latch fields for the founder report this comes from.
         ApplyMenuHorizontalNavLock(ref left, ref right);
+        AppendMenuJoystickNav(ref left, ref right);
         UpdateMenuJoystickUp(ref up);
         UpdateMenuDownHold(ref down);
 
@@ -1205,25 +1226,44 @@ public class StartScreenController : MonoBehaviour
         if (JoystickSerial.Instance == null || !JoystickSerial.Instance.IsConnected)
             return;
 
-        left |= IsJoystickLeftDown(joystickRight) || IsJoystickLeftDown(joystickLeft)
+        // The stick's own edges, de-bounced against the stick's own held state and
+        // nothing else, then merged. Whatever the hands over the height sensors are
+        // doing — including sitting in a lean that never ends — cannot reach in here.
+        bool stickLeft = IsJoystickLeftDown(joystickRight) || IsJoystickLeftDown(joystickLeft)
             || _menuStick.LeftDown;
-        right |= IsJoystickRightDown(joystickRight) || IsJoystickRightDown(joystickLeft)
+        bool stickRight = IsJoystickRightDown(joystickRight) || IsJoystickRightDown(joystickLeft)
             || _menuStick.RightDown;
+
+        ApplyMenuStickHorizontalNavLock(ref stickLeft, ref stickRight);
+
+        left |= stickLeft;
+        right |= stickRight;
     }
 
+    // Held state of the sensor/menu-key family only. The stick used to be OR-ed in
+    // here too, which is what made the single latch a shared fate; it now answers for
+    // itself in MenuStickHorizontal*Held below.
     private bool MenuHorizontalLeftHeld()
     {
         return Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.J)
-            || MenuSensorLeanLeftHeld()
-            || IsJoystickLeftHeld(joystickRight) || IsJoystickLeftHeld(joystickLeft)
-            || (JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected && JoystickSerial.Instance.Left);
+            || MenuSensorLeanLeftHeld();
     }
 
     private bool MenuHorizontalRightHeld()
     {
         return Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.L)
-            || MenuSensorLeanRightHeld()
-            || IsJoystickRightHeld(joystickRight) || IsJoystickRightHeld(joystickLeft)
+            || MenuSensorLeanRightHeld();
+    }
+
+    private bool MenuStickHorizontalLeftHeld()
+    {
+        return IsJoystickLeftHeld(joystickRight) || IsJoystickLeftHeld(joystickLeft)
+            || (JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected && JoystickSerial.Instance.Left);
+    }
+
+    private bool MenuStickHorizontalRightHeld()
+    {
+        return IsJoystickRightHeld(joystickRight) || IsJoystickRightHeld(joystickLeft)
             || (JoystickSerial.Instance != null && JoystickSerial.Instance.IsConnected && JoystickSerial.Instance.Right);
     }
 
@@ -1242,9 +1282,27 @@ public class StartScreenController : MonoBehaviour
             _menuHorizontalNavLocked = true;
     }
 
+    // Same de-bounce, same shape, its own state: one push of the stick is one step,
+    // and it is released by letting the stick go — by nothing else.
+    private void ApplyMenuStickHorizontalNavLock(ref bool left, ref bool right)
+    {
+        if (_menuStickHorizontalNavLocked)
+        {
+            left = false;
+            right = false;
+            if (!MenuStickHorizontalLeftHeld() && !MenuStickHorizontalRightHeld())
+                _menuStickHorizontalNavLocked = false;
+            return;
+        }
+
+        if (left || right)
+            _menuStickHorizontalNavLocked = true;
+    }
+
     private void ResetMenuHorizontalNavLock()
     {
         _menuHorizontalNavLocked = false;
+        _menuStickHorizontalNavLocked = false;
     }
 
     private void UpdateMenuJoystickUp(ref bool up)
@@ -1441,26 +1499,38 @@ public class StartScreenController : MonoBehaviour
         _joystickUpConfirmTriggered = false;
     }
 
+    // isActiveAndEnabled, not enabled. A JoystickInput whose GameObject is switched off
+    // stops running Update, and every flag it publishes FREEZES at whatever it last
+    // saw — `enabled` stays true the whole time, so the old reads went on believing it.
+    //
+    // The menu switches PlayerRight off the instant 1 ИГРОК is selected, and selecting
+    // 1 ИГРОК is done by pushing the stick sideways — so the wrapper on PlayerRight was
+    // frozen in the very act of being deflected, reporting RightHeld forever after. The
+    // horizontal nav latch waits for "nothing held" to release, so from that moment the
+    // whole axis was dead: no 2 ИГРОКА, no ТРЕНИРОВКА, no changing lanes (founder's live
+    // report). Same family as 90b3913 — a wrapper Unity is not ticking is not evidence.
+    // The menu's own tracker (MenuStickEdges) reads JoystickSerial directly and is
+    // unaffected, which is exactly why it is the floor under this.
     private static bool IsJoystickLeftDown(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.LeftDown;
+        joystick != null && joystick.isActiveAndEnabled && joystick.LeftDown;
 
     private static bool IsJoystickRightDown(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.RightDown;
+        joystick != null && joystick.isActiveAndEnabled && joystick.RightDown;
 
     private static bool IsJoystickUpHeld(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.UpHeld;
+        joystick != null && joystick.isActiveAndEnabled && joystick.UpHeld;
 
     private static bool IsJoystickLeftHeld(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.LeftHeld;
+        joystick != null && joystick.isActiveAndEnabled && joystick.LeftHeld;
 
     private static bool IsJoystickRightHeld(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.RightHeld;
+        joystick != null && joystick.isActiveAndEnabled && joystick.RightHeld;
 
     private static bool IsJoystickDownHeld(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.DownHeld;
+        joystick != null && joystick.isActiveAndEnabled && joystick.DownHeld;
 
     private static bool IsJoystickDownDown(JoystickInput joystick) =>
-        joystick != null && joystick.enabled && joystick.DownDown;
+        joystick != null && joystick.isActiveAndEnabled && joystick.DownDown;
 
     private static bool IsFlapDown(GestureInput gesture) =>
         gesture != null && gesture.enabled && gesture.JumpDown;

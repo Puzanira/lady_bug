@@ -28,6 +28,7 @@ namespace LadyBug.Tests
     {
         private const int PlayersRow = 0;
         private const int LanesRow = 1;
+        private const int StartRow = 2;
 
         private readonly List<GameObject> _spawned = new List<GameObject>();
 
@@ -165,6 +166,174 @@ namespace LadyBug.Tests
                 "активен ли он.");
         }
 
+        // --- the right-hand option of every row -----------------------------------
+        //
+        // Founder's live report from the cabinet: «у ледибаги нельзя выбрать режим с 2
+        // игроками сейчас и тренировку». Both are the RIGHT option of their row, and both
+        // rows are plain toggles — so the report is not "right is dead", it is "the whole
+        // horizontal axis is dead". Two separate things pinned it, and the tests below
+        // keep each of them fixed:
+        //
+        //   1. Choosing 1 ИГРОК deactivates PlayerRight, and it is chosen BY PUSHING THE
+        //      STICK. The JoystickInput living there froze mid-deflection with RightHeld
+        //      still true, and the nav latch releases only on "nothing held" — so after
+        //      one trip through the players row the axis never unlatched again.
+        //   2. The cabinet launches this game by holding a hand over a height sensor
+        //      (game.json controls = HeightA/HeightB). One hand over one sensor and
+        //      nothing over the other reads as a lean held forever, and while the sensors
+        //      and the stick shared a single latch that lean swallowed the stick too.
+
+        /// <summary>
+        /// Walk the players row the way a player does — 1 → 2 → 1 → 2 — instead of once.
+        /// The freeze only appears on the trip that switches PlayerRight OFF, so a test
+        /// that pushes the stick a single time never meets it.
+        /// </summary>
+        [Test]
+        public void CabinetStick_StillSwitchesPlayers_AfterPlayerRightWasDeactivatedMidPush()
+        {
+            Assert.AreEqual(1, Players(), "the cabinet preselects 1 player");
+
+            TapStickRight();
+            Assert.AreEqual(2, Players(), "first push: 1 ИГРОК -> 2 ИГРОКА");
+
+            TapStickRight();
+            Assert.AreEqual(1, Players(), "second push: back to 1 ИГРОК, PlayerRight switched off");
+            Assert.IsFalse(_stickOnPlayerRight.isActiveAndEnabled,
+                "PlayerRight is off again — that is the state the freeze lives in");
+
+            TapStickRight();
+            Assert.AreEqual(2, Players(),
+                "Джойстик перестал возвращать «2 ИГРОКА» после того, как строка один раз " +
+                "сходила обратно на «1 ИГРОК». Ровно это увидела основательница на стойке.\n" +
+                "Выбор «1 ИГРОК» ВЫКЛЮЧАЕТ PlayerRight, а делается он движением джойстика вбок " +
+                "— обёртка JoystickInput на PlayerRight замирает прямо в отклонённом " +
+                "положении и навсегда продолжает докладывать RightHeld. Замок горизонтали " +
+                "снимается только когда не зажато НИЧЕГО, поэтому ось умирает насовсем. " +
+                "Смотри IsJoystick*Held (isActiveAndEnabled, не enabled) и JoystickInput.OnDisable.");
+        }
+
+        /// <summary>
+        /// ТРЕНИРОВКА, reached with a hand sitting over a height sensor — which is not an
+        /// exotic pose: it is how the hub hands this game to the player.
+        /// </summary>
+        [Test]
+        public void CabinetStick_ReachesTraining_WhileAHandRestsOverAHeightSensor()
+        {
+            Set(_menu, "_row", StartRow);
+            RestAHandOverTheLeftSensor();
+
+            MenuFrame();  // the lean the cabinet starts us in, seen for the first time
+            Assert.IsTrue((bool)Call(_menu, "MenuSensorLeanLeftHeld"),
+                "предпосылка теста: рука над одним датчиком и пустота над другим читаются " +
+                "как наклон — если это больше не так, тест проверяет не тот случай");
+
+            // That first lean also counts as one step, so put the row back on СТАРТ and
+            // ask the stick — with the lean still held — to carry it across to ТРЕНИРОВКА.
+            Set(_menu, "_selectedStartOption", 0);
+            TapStickRight();
+
+            Assert.AreEqual(1, (int)Get(_menu, "_selectedStartOption"),
+                "Джойстиком нельзя выбрать ТРЕНИРОВКУ, пока рука лежит над датчиком высоты.\n" +
+                "Именно так автомат и отдаёт игру игроку: game.json объявляет controls " +
+                "HeightA/HeightB, то есть запуск из хаба — это удержание руки над датчиком. " +
+                "Рука над одним датчиком при пустом втором = наклон, зажатый навсегда; пока " +
+                "у датчиков и джойстика был ОДИН замок горизонтали, этот наклон глушил стик. " +
+                "Смотри ApplyMenuStickHorizontalNavLock — у стика свой замок.");
+        }
+
+        /// <summary>
+        /// The same thing again, but driven by StartScreenController.Update ITSELF rather
+        /// than by this file's replay of it. The replay fixes an order; Update is the order.
+        /// The deadlock was made OF that order — one latch applied after both families had
+        /// already been merged into the same two booleans — so a replay cannot be the only
+        /// witness to it. The start row is chosen because it is the one row whose value can
+        /// change without UpdateVisuals rebuilding the road preview, which edit mode cannot
+        /// do (Destroy vs DestroyImmediate).
+        /// </summary>
+        [Test]
+        public void CabinetStick_ReachesTraining_ThroughTheMenusOwnUpdate_WhileAHandRestsOverAHeightSensor()
+        {
+            Set(_menu, "_row", StartRow);
+            Set(_menu, "_controllerDetectionSettled", true);
+            RestAHandOverTheLeftSensor();
+
+            RealMenuFrame();  // the opening lean: seen once, counted once
+            Assert.IsTrue((bool)Call(_menu, "MenuSensorLeanLeftHeld"),
+                "предпосылка теста: рука над одним датчиком и пустота над другим = наклон");
+
+            Set(_menu, "_selectedStartOption", 0);
+
+            PushStick(Vector2.right);
+            RealMenuFrame();
+
+            Assert.AreEqual(1, (int)Get(_menu, "_selectedStartOption"),
+                "Через настоящий StartScreenController.Update джойстиком по-прежнему нельзя " +
+                "выбрать ТРЕНИРОВКУ, пока рука лежит над датчиком высоты. Это и есть живой " +
+                "баг основательницы: наклон, зажатый навсегда, держит общий замок " +
+                "горизонтали, и стик до значения строки не доходит. У датчиков и у стика " +
+                "должны быть РАЗНЫЕ замки — смотри ApplyMenuStickHorizontalNavLock.");
+        }
+
+        /// <summary>The same pinned axis, on the row the founder named first.</summary>
+        [Test]
+        public void CabinetStick_ReachesTwoPlayers_WhileAHandRestsOverAHeightSensor()
+        {
+            Set(_menu, "_row", PlayersRow);
+            RestAHandOverTheLeftSensor();
+
+            MenuFrame();
+
+            // As above: the opening lean spends one step of its own. Put the row back on
+            // 1 ИГРОК and ask the stick for 2 ИГРОКА with the lean still held.
+            Set(_menu, "_selectedPlayers", 1);
+            MirrorUpdateVisualsPlayerRight();
+            TapStickRight();
+
+            Assert.AreEqual(2, Players(),
+                "Джойстик не переключает строку ИГРОКИ, пока рука лежит над датчиком высоты — " +
+                "«2 ИГРОКА» недостижимы. Причина та же, что у соседнего теста про ТРЕНИРОВКУ.");
+        }
+
+        /// <summary>
+        /// The lean the cabinet leaves us in must cost exactly one step, not a step every
+        /// frame: the de-bounce has to survive being split in two.
+        /// </summary>
+        [Test]
+        public void AHeldSensorLean_StillCountsOnce_NotEveryFrame()
+        {
+            Set(_menu, "_row", LanesRow);
+            RestAHandOverTheLeftSensor();
+
+            MenuFrame();
+            int afterFirstFrame = (int)Get(_menu, "_selectedLanes");
+
+            for (int i = 0; i < 5; i++)
+                MenuFrame();
+
+            Assert.AreEqual(afterFirstFrame, (int)Get(_menu, "_selectedLanes"),
+                "Зажатый наклон рук снова листает значение строки каждый кадр. Замок " +
+                "ApplyMenuHorizontalNavLock существует ровно против этого — разделяя его " +
+                "надвое, не потеряй сам дребезг.");
+        }
+
+        /// <summary>
+        /// Same for the stick: one push, one step, however long it is held.
+        /// </summary>
+        [Test]
+        public void AHeldStick_StillCountsOnce_NotEveryFrame()
+        {
+            Set(_menu, "_row", LanesRow);
+            int before = (int)Get(_menu, "_selectedLanes");
+
+            PushStick(Vector2.right);
+            for (int i = 0; i < 6; i++)
+                MenuFrame();
+
+            Assert.AreEqual(before + 1, (int)Get(_menu, "_selectedLanes"),
+                "Зажатый вбок джойстик снова листает полосы каждый кадр вместо одного шага — " +
+                "собственный замок стика (ApplyMenuStickHorizontalNavLock) потерян.");
+        }
+
         /// <summary>
         /// Pins the premise the tests above are built on: in 1-player mode the menu really
         /// does deactivate PlayerRight, so a JoystickInput living there really does stop
@@ -229,6 +398,23 @@ namespace LadyBug.Tests
             int nav = update.IndexOf("AppendMenuJoystickNav(ref left, ref right)", System.StringComparison.Ordinal);
             Assert.Less(nav, update.IndexOf("UpdateMenuJoystickUp(ref up)", System.StringComparison.Ordinal), orderBroke);
             Assert.Less(nav, update.IndexOf("UpdateMenuDownHold(ref down)", System.StringComparison.Ordinal), orderBroke);
+
+            // And the other half of the order, which is what the founder's bug was made of:
+            // the sensor/key family is de-bounced BEFORE the stick joins the same pair of
+            // booleans. Merge first and de-bounce once afterwards — the shape this code had
+            // — and a lean that is never released (one hand over a sensor, nothing over the
+            // other: how the hub launches this game) swallows every push of the stick.
+            int sensorLock = update.IndexOf("ApplyMenuHorizontalNavLock(ref left, ref right)", System.StringComparison.Ordinal);
+            Assert.Greater(sensorLock, 0,
+                "StartScreenController.Update больше не вызывает ApplyMenuHorizontalNavLock — " +
+                "дребезг горизонтали в меню пропал: зажатый наклон рук снова будет листать " +
+                "значение строки каждый кадр.");
+            Assert.Less(sensorLock, nav,
+                "ApplyMenuHorizontalNavLock снова стоит ПОСЛЕ AppendMenuJoystickNav, то есть " +
+                "один замок опять накрывает и датчики, и джойстик. Именно так «2 ИГРОКА» и " +
+                "«ТРЕНИРОВКА» стали недостижимы на стойке: рука, лежащая над датчиком " +
+                "высоты, — это наклон, зажатый навсегда, и он глушил стик. У стика свой " +
+                "замок внутри AppendMenuJoystickNav (ApplyMenuStickHorizontalNavLock).");
         }
 
         /// <summary>
@@ -272,7 +458,23 @@ namespace LadyBug.Tests
                 if (stick != null && stick.isActiveAndEnabled)
                     Call(stick, "Update");
 
-            var nav = new object[] { false, false };
+            // Update's own order, in full. The two de-bounce latches used to be one, and
+            // replaying the frame WITHOUT them is what let this file stay green while the
+            // menu's horizontal axis was dead on the cabinet: every deadlock in this file
+            // lives inside ApplyMenuHorizontalNavLock / ApplyMenuStickHorizontalNavLock,
+            // so a frame that skips them proves nothing about the screen the player sees.
+            Call(_menu, "UpdateMenuSensorFlapState");
+
+            var board = new object[] { false, false, false };
+            typeof(StartScreenController)
+                .GetMethod("AppendMenuCombinedBoardNav", BindingFlags.NonPublic | BindingFlags.Instance)
+                .Invoke(_menu, board);
+            var nav = new object[] { board[0], board[1] };
+
+            typeof(StartScreenController)
+                .GetMethod("ApplyMenuHorizontalNavLock", BindingFlags.NonPublic | BindingFlags.Instance)
+                .Invoke(_menu, nav);
+
             typeof(StartScreenController)
                 .GetMethod("AppendMenuJoystickNav", BindingFlags.NonPublic | BindingFlags.Instance)
                 .Invoke(_menu, nav);
@@ -309,6 +511,8 @@ namespace LadyBug.Tests
             if (row == PlayersRow)
             {
                 Set(_menu, "_selectedPlayers", (int)Get(_menu, "_selectedPlayers") == 1 ? 2 : 1);
+                Call(_menu, "RestoreMenuGestureMode");
+                MirrorUpdateVisualsPlayerRight();
             }
             else if (row == LanesRow)
             {
@@ -322,14 +526,64 @@ namespace LadyBug.Tests
             }
         }
 
+        /// <summary>
+        /// The one thing UpdateVisuals does that the stick can feel: PlayerRight is on the
+        /// road only in 2-player mode (pinned by TheOnePlayerMenu_DeactivatesPlayerRight).
+        /// It matters here because the player flips that switch WITH THE STICK DEFLECTED —
+        /// choosing 1 ИГРОК switches PlayerRight off in the same frame the stick is pushed
+        /// sideways — and a JoystickInput switched off mid-deflection stops ticking with
+        /// "held" still set. Leaving this out of the replay hides exactly that.
+        /// </summary>
+        private void MirrorUpdateVisualsPlayerRight()
+        {
+            if (_stickOnPlayerRight != null)
+                _stickOnPlayerRight.gameObject.SetActive((int)Get(_menu, "_selectedPlayers") == 2);
+        }
+
         private static void PushStick(Vector2 deflection)
         {
             ArcadeLauncherStub.SetJoystick(deflection);
         }
 
+        /// <summary>
+        /// One frame driven by the menu's own Update, with only the readers Unity itself
+        /// would have ticked first. No replay, no hand-picked call order.
+        /// </summary>
+        private void RealMenuFrame()
+        {
+            Call(_serial, "Update");
+            foreach (JoystickInput stick in new[] { _stickOnPlayerLeft, _stickOnPlayerRight })
+                if (stick != null && stick.isActiveAndEnabled)
+                    Call(stick, "Update");
+            Call(_menu, "Update");
+        }
+
+        /// <summary>One deliberate sideways push and release — what a player actually does.</summary>
+        private void TapStickRight()
+        {
+            PushStick(Vector2.right);
+            MenuFrame();
+            PushStick(Vector2.zero);
+            MenuFrame();
+        }
+
+        /// <summary>
+        /// The pose the arcade hub hands this game over in: one hand over the left height
+        /// sensor (normalized 1 = hand right at it), nothing over the right one.
+        /// </summary>
+        private static void RestAHandOverTheLeftSensor()
+        {
+            ArcadeLauncherStub.SetHeights(1f, 0f);
+        }
+
         private int Row()
         {
             return (int)Get(_menu, "_row");
+        }
+
+        private int Players()
+        {
+            return (int)Get(_menu, "_selectedPlayers");
         }
 
         // Keeps UpdateVisuals from rebuilding the road geometry in an edit-mode frame.
