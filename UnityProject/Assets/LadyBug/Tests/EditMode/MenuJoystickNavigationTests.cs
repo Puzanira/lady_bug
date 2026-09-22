@@ -196,11 +196,7 @@ namespace LadyBug.Tests
         [Test]
         public void MenuUpdate_StillRunsTheJoystickNavPath()
         {
-            string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
-                Application.dataPath, "LadyBug/Scripts/lady_bug/StartScreenController.cs"));
-            int updateAt = source.IndexOf("private void Update()", System.StringComparison.Ordinal);
-            Assert.Greater(updateAt, 0, "StartScreenController.Update() not found");
-            string update = source.Substring(updateAt, System.Math.Min(2500, source.Length - updateAt));
+            string update = MenuUpdateBody();
 
             foreach (string call in new[]
                      {
@@ -214,6 +210,52 @@ namespace LadyBug.Tests
                     "выпал из обработки меню целиком, и тесты рядом этого не увидят: они " +
                     "повторяют порядок вызовов Update вручную. Верни вызов или перепиши тесты.");
             }
+
+            // The order is load-bearing and not self-evident from the call site:
+            // AppendMenuJoystickNav is where the menu's own stick tracker is polled, and
+            // the other two only READ the edges that poll refreshes. Swapped, the cursor
+            // answers the stick a frame late on every row — and nothing else here would
+            // notice, because the tests above replay this order by hand rather than
+            // reading it off Update.
+            const string orderBroke =
+                "Порядок вызовов в StartScreenController.Update разъехался: " +
+                "AppendMenuJoystickNav обязан идти ПЕРВЫМ — именно он опрашивает стик " +
+                "(_menuStick.Poll), а UpdateMenuJoystickUp и UpdateMenuDownHold только " +
+                "читают снятые им фронты. Иначе меню отвечает на джойстик с опозданием " +
+                "на кадр, и тесты рядом этого не покажут: они воспроизводят порядок " +
+                "Update руками.";
+            // Full call text, not the bare method name: Update's own comments mention
+            // these methods by name, and matching prose would order the comments.
+            int nav = update.IndexOf("AppendMenuJoystickNav(ref left, ref right)", System.StringComparison.Ordinal);
+            Assert.Less(nav, update.IndexOf("UpdateMenuJoystickUp(ref up)", System.StringComparison.Ordinal), orderBroke);
+            Assert.Less(nav, update.IndexOf("UpdateMenuDownHold(ref down)", System.StringComparison.Ordinal), orderBroke);
+        }
+
+        /// <summary>
+        /// StartScreenController.Update()'s body, brace-matched rather than a fixed window
+        /// of characters: the method grows with every menu feature, and a window that
+        /// quietly stops reaching the joystick calls turns the guard above into a no-op.
+        /// </summary>
+        private static string MenuUpdateBody()
+        {
+            string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
+                Application.dataPath, "LadyBug/Scripts/lady_bug/StartScreenController.cs"));
+            int updateAt = source.IndexOf("private void Update()", System.StringComparison.Ordinal);
+            Assert.Greater(updateAt, 0,
+                "StartScreenController.Update() не найден — меню перестало обновляться " +
+                "из Update, перенацель этот сторож на то, что пришло на смену.");
+
+            int open = source.IndexOf('{', updateAt);
+            int depth = 0;
+            for (int i = open; i < source.Length; i++)
+            {
+                if (source[i] == '{') depth++;
+                else if (source[i] == '}' && --depth == 0)
+                    return source.Substring(open, i - open + 1);
+            }
+
+            Assert.Fail("StartScreenController.Update() не закрывается — разбор исходника сломан.");
+            return null;
         }
 
         // --- harness -------------------------------------------------------------
