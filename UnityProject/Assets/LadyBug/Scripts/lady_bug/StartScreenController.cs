@@ -1048,13 +1048,65 @@ public class StartScreenController : MonoBehaviour
         return false;
     }
 
+    // Menu navigation used to have exactly one way to see the stick: a JoystickInput
+    // wrapper. A wrapper only produces edges from its own Update, and Update does not
+    // run on a disabled component OR on a deactivated GameObject — and UpdateVisuals
+    // deactivates PlayerRight for the whole of 1-player mode, which is what the cabinet
+    // preselects. So whether the menu could be listed at all came down to one line of
+    // RestoreMenuGestureMode switching the OTHER wrapper on (90b3913), with nothing
+    // anywhere to say so. A merge with the author's repo put that line back to `false`
+    // once already, and the menu went dead on the stick without a single error.
+    //
+    // This tracker is the floor under that: the menu derives its own stick edges from
+    // JoystickSerial — which is a scene-level reader that ticks regardless of which
+    // player object is on — so navigation no longer depends on where a wrapper lives or
+    // who remembered to enable it. The wrappers stay in the predicates exactly as before;
+    // they are now an addition, not the only path. Guarded by _useHardwareInput so the
+    // keyboard-only menu behaves precisely as it did.
+    private sealed class MenuStickEdges
+    {
+        public bool UpHeld { get; private set; }
+        public bool DownHeld { get; private set; }
+        public bool LeftDown { get; private set; }
+        public bool RightDown { get; private set; }
+
+        private bool _prevLeft;
+        private bool _prevRight;
+
+        public void Poll(bool hardwareMenu)
+        {
+            JoystickSerial js = JoystickSerial.Instance;
+            bool live = hardwareMenu && js != null && js.IsConnected;
+
+            bool left = live && js.Left;
+            bool right = live && js.Right;
+
+            UpHeld = live && js.Up;
+            DownHeld = live && js.Down;
+            LeftDown = left && !_prevLeft;
+            RightDown = right && !_prevRight;
+
+            _prevLeft = left;
+            _prevRight = right;
+        }
+    }
+
+    private readonly MenuStickEdges _menuStick = new MenuStickEdges();
+
     private void AppendMenuJoystickNav(ref bool left, ref bool right)
     {
+        // First joystick read of the menu's frame — Update calls this before
+        // UpdateMenuJoystickUp and UpdateMenuDownHold, and both of them read the edges
+        // refreshed here. Keep it that way if the order in Update ever moves.
+        _menuStick.Poll(_useHardwareInput);
+
         if (JoystickSerial.Instance == null || !JoystickSerial.Instance.IsConnected)
             return;
 
-        left |= IsJoystickLeftDown(joystickRight) || IsJoystickLeftDown(joystickLeft);
-        right |= IsJoystickRightDown(joystickRight) || IsJoystickRightDown(joystickLeft);
+        left |= IsJoystickLeftDown(joystickRight) || IsJoystickLeftDown(joystickLeft)
+            || _menuStick.LeftDown;
+        right |= IsJoystickRightDown(joystickRight) || IsJoystickRightDown(joystickLeft)
+            || _menuStick.RightDown;
     }
 
     private bool MenuHorizontalLeftHeld()
@@ -1102,7 +1154,8 @@ public class StartScreenController : MonoBehaviour
             return;
         }
 
-        bool held = IsJoystickUpHeld(joystickRight) || IsJoystickUpHeld(joystickLeft);
+        bool held = IsJoystickUpHeld(joystickRight) || IsJoystickUpHeld(joystickLeft)
+            || _menuStick.UpHeld;
         if (held)
             _joystickUpHoldTimer += Time.deltaTime;
         else if (_prevJoystickUpHeld && _joystickUpHoldTimer < MenuJoystickUpTapMax)
@@ -1135,6 +1188,7 @@ public class StartScreenController : MonoBehaviour
         bool held = Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.K)
             || _menuSensorDuckHeldFor >= MenuSensorDuckMinHold
             || IsJoystickDownHeld(joystickRight) || IsJoystickDownHeld(joystickLeft)
+            || _menuStick.DownHeld
             || ArcadeConfirmHeld();
 
         // Upper rows have nothing to confirm — move down on the first frame
