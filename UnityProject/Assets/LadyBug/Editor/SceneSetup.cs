@@ -1631,8 +1631,8 @@ public static class SceneSetup
                   + "ТРЮКИ\n"
                   + "АРКА: один приседает под аркой, другой в этот момент перепрыгивает её вместе с ним\n"
                   + "КОЛЬЦО: игроки одновременно меняются полосами — один в прыжке, другой понизу\n\n"
-                  + "ДАТЧИКИ РАССТОЯНИЯ\n"
-                  + "2 датчика на игрока — по одному на руку (только верх/низ):\n"
+                  + "ДАТЧИКИ ВЫСОТЫ\n"
+                  + "2 датчика высоты на игрока — по одному на руку (только верх/низ):\n"
                   + "обе руки вниз — пригнуться, одна вверх/другая вниз — полоса в сторону опущенной руки,\n"
                   + "быстро жать «верх» на обеих руках разом — прыжок-полёт\n\n"
                   + "ВЫХОД ИЗ ИГРЫ\n"
@@ -4452,7 +4452,9 @@ public static class SceneSetup
         const float joystickWidthScale = 1.34f;
 
         CreateControlsSubLabel(page.transform, new Vector2(-playerX, 175f), "ИГРОК 1", blockFontSize);
-        CreateControlsSubLabel(page.transform, new Vector2(-playerX, 105f), "ДАТЧИКИ", blockFontSize);
+        // Named exactly as the sticker on the panel reads — «ДАТЧИКИ» alone
+        // was the label here and it matched nothing the player can see.
+        CreateControlsSubLabel(page.transform, new Vector2(-playerX, 105f), "ДАТЧИКИ ВЫСОТЫ", blockFontSize, 460f);
         CreateSensorGlyph(page.transform, new Vector2(-playerX - sensorSpread, sensorIconY), -52f, iconScale, 0f, sensorWidthScale);
         CreateSensorGlyph(page.transform, new Vector2(-playerX + sensorSpread, sensorIconY), 52f, iconScale, 0f, sensorWidthScale);
 
@@ -5549,12 +5551,16 @@ public static class SceneSetup
         hint.fontSize = 24;
         hint.alignment = TextAnchor.MiddleCenter;
         hint.color = new Color(0.85f, 0.85f, 0.85f);
-        hint.text = "←→ выбор, прыжок — подтвердить";
+        // The organ is named, the gesture stays as the explanation: «прыжок»
+        // on its own told a player at the cabinet nothing about WHAT to move.
+        // Both controls that can answer this dialog are listed because either
+        // player may be the one holding it (PauseController.HandleDialogInput).
+        hint.text = "ДАТЧИКИ ВЫСОТЫ ИЛИ ДЖОЙСТИК: ←→ ВЫБОР, ПРЫЖОК — ПОДТВЕРДИТЬ";
         RectTransform hintRt = hint.GetComponent<RectTransform>();
         hintRt.anchorMin = new Vector2(0.5f, 0.5f);
         hintRt.anchorMax = new Vector2(0.5f, 0.5f);
         hintRt.pivot = new Vector2(0.5f, 0.5f);
-        hintRt.sizeDelta = new Vector2(800f, 60f);
+        hintRt.sizeDelta = new Vector2(1200f, 60f);
         hintRt.anchoredPosition = new Vector2(0f, -140f);
 
         canvasGo.SetActive(false);
@@ -5897,11 +5903,16 @@ public static class SceneSetup
 
         // Layout matches ControlPanelDiagram.png's own 1600x420 source
         // space: white button top-left above the 2 laser rangefinders
-        // (датчики — long red beam + a short pale "palm" crossing it),
-        // joystick top-middle with a red/green button pair below it, and a
-        // rotating handle (рукоятка, a dial with a pointer) on the right —
-        // NOT the wifi-style icon this used to be, per feedback that it
-        // reads as a wireless icon rather than a physical twist-knob.
+        // (датчики высоты — long red beam + a short pale "palm" crossing
+        // it), joystick top-middle with a red/green button pair below it,
+        // and a крутилка (a dial with a pointer) on the right — NOT the
+        // wifi-style icon this used to be, per feedback that it reads as a
+        // wireless icon rather than a physical twist-knob.
+        //
+        // NOTE: the artwork still draws the top-left button WHITE while the
+        // cabinet's own sticker calls that one «жёлтая кнопка». The prompt
+        // above it (LoaderScreenController.Messages) names the three real
+        // colours; the PNG has not been redrawn.
         GameObject buttonWhite = CreatePanelHighlight(panelGo.transform, "HighlightButtonWhite", panelWidth, panelHeight, 290f, 110f, 150f, 150f);
         GameObject rangefinder1 = CreatePanelHighlight(panelGo.transform, "HighlightRangefinder1", panelWidth, panelHeight, 200f, 300f, 130f, 180f);
         GameObject rangefinder2 = CreatePanelHighlight(panelGo.transform, "HighlightRangefinder2", panelWidth, panelHeight, 380f, 300f, 130f, 180f);

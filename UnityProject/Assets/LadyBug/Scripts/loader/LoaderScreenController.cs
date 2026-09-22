@@ -40,12 +40,20 @@ public class LoaderScreenController : MonoBehaviour
     // Index-matched to gameStartKeys — see class comment.
     [SerializeField] private IntroSequence[] gameIntros;
 
+    // Every control is named with the word printed on its sticker at the
+    // cabinet — крутилка · жёлтая/зелёная/красная кнопка · датчики высоты ·
+    // джойстик · кнопка меню. This screen is the one that tells a passer-by
+    // what to touch, so "любую кнопку" is not enough: the panel has three
+    // and the player picks one by eye, i.e. by colour. See
+    // Tests/EditMode/ControlVocabularyTests.
     private static readonly string[] Messages =
     {
-        "НАЖМИТЕ ЛЮБУЮ КНОПКУ",
-        "НАКРОЙТЕ ЛЮБОЙ ДАТЧИК",
+        "НАЖМИТЕ ЖЁЛТУЮ, ЗЕЛЁНУЮ ИЛИ КРАСНУЮ КНОПКУ",
+        // One sensor is enough to trip this, so the hint is singular — the
+        // group on the sticker is «датчики высоты», plural.
+        "НАКРОЙТЕ ЛЮБОЙ ДАТЧИК ВЫСОТЫ",
         "ПОШЕВЕЛИТЕ ЛЮБОЙ ДЖОЙСТИК",
-        "ПОКРУТИТЕ ЛЮБУЮ РУКОЯТКУ",
+        "ПОКРУТИТЕ ЛЮБУЮ КРУТИЛКУ",
     };
 
     // Needs to clear the reference-resolution half-width (960) plus half

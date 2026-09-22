@@ -187,14 +187,23 @@ public class StartScreenController : MonoBehaviour
     // The hardware wording names the CONTROLS, not keyboard letters — on the
     // cabinet there is no keyboard to look at. Up is a flap of both hands and
     // down is a duck (GestureInput), which is why those two aren't spelled as
-    // "↑ ↓ датчики": the sensor gesture for each direction is a different
-    // motion and has to be named separately.
+    // "↑ ↓ датчики высоты": the sensor gesture for each direction is a
+    // different motion and has to be named separately.
+    //
+    // But the gesture may only EXPLAIN the control, never stand in for its
+    // name. This block used to say «НАКЛОН РУК» / «ВЗМАХ · ПРИСЕД» and never
+    // name the hardware at all, while the СТАРТ row one line below said
+    // «ДАТЧИКИ ВЫСОТЫ» — the same organ in two languages on one screen, and
+    // nobody at the cabinet connects "наклон рук" to the sticker that reads
+    // «датчики высоты». So the organ is named first, on its own line, and the
+    // two gesture lines hang under it as the explanation.
     private const string RowHintValueKeyboard =
         "← →  ИЗМЕНИТЬ — A D · J L\n"
         + "↑ ↓  НА ДРУГУЮ СТРОКУ — W S · I K";
 
     private const string RowHintValueHardware =
-        "← →  ИЗМЕНИТЬ — НАКЛОН РУК\n"
+        "ДАТЧИКИ ВЫСОТЫ\n"
+        + "← →  ИЗМЕНИТЬ — НАКЛОН РУК\n"
         + "↑ ↓  НА ДРУГУЮ СТРОКУ — ВЗМАХ · ПРИСЕД\n"
         + "ИЛИ ДЖОЙСТИК В ЭТИ ЖЕ СТОРОНЫ";
 
@@ -209,11 +218,12 @@ public class StartScreenController : MonoBehaviour
         "ВЫБОР — ЗАЖАТЬ ВНИЗ НА 5 СЕК";
 
     // Rows on the ВЫБОР В МЕНЮ carousel page. Hardware wording matches the
-    // УПРАВЛЕНИЕ page built by SceneSetup (ИГРОК 1 — ДАТЧИКИ, ИГРОК 2 —
-    // ДЖОЙСТИК), so the two instruction screens agree with each other.
+    // УПРАВЛЕНИЕ page built by SceneSetup (ИГРОК 1 — ДАТЧИКИ ВЫСОТЫ,
+    // ИГРОК 2 — ДЖОЙСТИК), so the two instruction screens agree with each
+    // other and with the stickers on the panel.
     private const string MenuSelectionPlayer1Keyboard = "ИГРОК 1: WASD";
     private const string MenuSelectionPlayer2Keyboard = "ИГРОК 2: IJKL";
-    private const string MenuSelectionPlayer1Hardware = "ИГРОК 1: ДАТЧИКИ РУК";
+    private const string MenuSelectionPlayer1Hardware = "ИГРОК 1: ДАТЧИКИ ВЫСОТЫ";
     private const string MenuSelectionPlayer2Hardware = "ИГРОК 2: ДЖОЙСТИК";
 
     private int _lastCarouselPage = -1;
