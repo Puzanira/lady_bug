@@ -145,9 +145,35 @@ namespace LadyBug
         /// Cabinet height (0..1, bigger = closer) -> the millimetres the game's own sensor
         /// readers publish. Lives here, not in either serial reader, so the two of them cannot
         /// drift apart on the cabinet's single pair of sensors.
+        ///
+        /// Zero is NOT a distance — it is "there is nothing in the band". arcade-controls
+        /// produces it for a sensor with no target at all (SerialParsers.HeightMmToNormalized
+        /// returns 0 for a negative reading, and the boards report a negative reading when the
+        /// beam comes back empty) and, indistinguishably, for a hand at or past the far edge
+        /// of the tuned band. This bridge therefore answers it the way the game's own protocol
+        /// answers an empty sensor: -1, which GestureInput.HandStateForDistance reads as
+        /// Neutral, and which SanitizeDistanceMm already passes through untouched.
+        ///
+        /// It used to answer 300mm — the far end of the span — and 300mm is past the 200mm
+        /// "hand up" cutoff, so on the cabinet an EMPTY sensor read as a RAISED HAND. Both
+        /// sensors empty meant "both hands up" forever; one hand over one sensor with nothing
+        /// over the other was a fully formed lean, held for as long as the hand stayed there.
+        /// That is not a corner case here: game.json declares this game's controls as
+        /// HeightA/HeightB, so the hub launches it by holding a hand over a sensor, and the
+        /// menu opened mid-phantom-lean every single time (it toggled a row value by itself
+        /// before the player touched anything).
+        ///
+        /// The cost, stated plainly: a hand raised at or beyond HeightFarMm now reads Neutral
+        /// instead of Up. Where the band ends is a tuning knob of the physical build
+        /// (SerialTuning.HeightFarMm), not something this bridge should be guessing around —
+        /// and the author's own boards have always called an out-of-range hand "no reading"
+        /// (GestureInput.NoTargetMm), so this restores his semantics rather than inventing new.
         /// </summary>
         public static int HeightToSensorMm(float normalized)
         {
+            if (normalized <= 0f)
+                return -1;
+
             return Mathf.RoundToInt((1f - Mathf.Clamp01(normalized)) * HeightSensorSpanMm);
         }
 

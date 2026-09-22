@@ -178,10 +178,10 @@ namespace LadyBug.Tests
         //      STICK. The JoystickInput living there froze mid-deflection with RightHeld
         //      still true, and the nav latch releases only on "nothing held" — so after
         //      one trip through the players row the axis never unlatched again.
-        //   2. The cabinet launches this game by holding a hand over a height sensor
-        //      (game.json controls = HeightA/HeightB). One hand over one sensor and
-        //      nothing over the other reads as a lean held forever, and while the sensors
-        //      and the stick shared a single latch that lean swallowed the stick too.
+        //   2. A lean held over the height sensors — one hand down, one hand up, and left
+        //      there — never lets go by definition. While the sensors and the stick shared
+        //      a single de-bounce latch, and that latch released only on "nothing held at
+        //      all", such a lean swallowed every push of the stick as well.
 
         /// <summary>
         /// Walk the players row the way a player does — 1 → 2 → 1 → 2 — instead of once.
@@ -213,31 +213,29 @@ namespace LadyBug.Tests
         }
 
         /// <summary>
-        /// ТРЕНИРОВКА, reached with a hand sitting over a height sensor — which is not an
-        /// exotic pose: it is how the hub hands this game to the player.
+        /// ТРЕНИРОВКА, reached while the hands are holding a lean over the height sensors.
         /// </summary>
         [Test]
         public void CabinetStick_ReachesTraining_WhileAHandRestsOverAHeightSensor()
         {
             Set(_menu, "_row", StartRow);
-            RestAHandOverTheLeftSensor();
+            HoldASteadyLeanOverTheHeightSensors();
 
             MenuFrame();  // the lean the cabinet starts us in, seen for the first time
             Assert.IsTrue((bool)Call(_menu, "MenuSensorLeanLeftHeld"),
-                "предпосылка теста: рука над одним датчиком и пустота над другим читаются " +
-                "как наклон — если это больше не так, тест проверяет не тот случай");
+                "предпосылка теста: одна рука у датчика, вторая поднята — это наклон, и он " +
+                "зажат; если это больше не так, тест проверяет не тот случай");
 
-            // That first lean also counts as one step, so put the row back on СТАРТ and
-            // ask the stick — with the lean still held — to carry it across to ТРЕНИРОВКА.
+            // That first lean counts as one step of its own, so put the row back on СТАРТ
+            // and ask the stick — with the lean still held — to carry it to ТРЕНИРОВКА.
             Set(_menu, "_selectedStartOption", 0);
             TapStickRight();
 
             Assert.AreEqual(1, (int)Get(_menu, "_selectedStartOption"),
-                "Джойстиком нельзя выбрать ТРЕНИРОВКУ, пока рука лежит над датчиком высоты.\n" +
-                "Именно так автомат и отдаёт игру игроку: game.json объявляет controls " +
-                "HeightA/HeightB, то есть запуск из хаба — это удержание руки над датчиком. " +
-                "Рука над одним датчиком при пустом втором = наклон, зажатый навсегда; пока " +
-                "у датчиков и джойстика был ОДИН замок горизонтали, этот наклон глушил стик. " +
+                "Джойстиком нельзя выбрать ТРЕНИРОВКУ, пока руки держат наклон над " +
+                "датчиками высоты.\n" +
+                "Зажатый жест не отпускается никогда — а общий замок горизонтали снимался " +
+                "только когда не зажато НИЧЕГО, поэтому такой наклон глушил и стик тоже. " +
                 "Смотри ApplyMenuStickHorizontalNavLock — у стика свой замок.");
         }
 
@@ -255,11 +253,11 @@ namespace LadyBug.Tests
         {
             Set(_menu, "_row", StartRow);
             Set(_menu, "_controllerDetectionSettled", true);
-            RestAHandOverTheLeftSensor();
+            HoldASteadyLeanOverTheHeightSensors();
 
             RealMenuFrame();  // the opening lean: seen once, counted once
             Assert.IsTrue((bool)Call(_menu, "MenuSensorLeanLeftHeld"),
-                "предпосылка теста: рука над одним датчиком и пустота над другим = наклон");
+                "предпосылка теста: одна рука у датчика, вторая поднята = зажатый наклон");
 
             Set(_menu, "_selectedStartOption", 0);
 
@@ -268,8 +266,8 @@ namespace LadyBug.Tests
 
             Assert.AreEqual(1, (int)Get(_menu, "_selectedStartOption"),
                 "Через настоящий StartScreenController.Update джойстиком по-прежнему нельзя " +
-                "выбрать ТРЕНИРОВКУ, пока рука лежит над датчиком высоты. Это и есть живой " +
-                "баг основательницы: наклон, зажатый навсегда, держит общий замок " +
+                "выбрать ТРЕНИРОВКУ, пока руки держат наклон над датчиками. Зажатый " +
+                "навсегда жест держит общий замок " +
                 "горизонтали, и стик до значения строки не доходит. У датчиков и у стика " +
                 "должны быть РАЗНЫЕ замки — смотри ApplyMenuStickHorizontalNavLock.");
         }
@@ -279,30 +277,31 @@ namespace LadyBug.Tests
         public void CabinetStick_ReachesTwoPlayers_WhileAHandRestsOverAHeightSensor()
         {
             Set(_menu, "_row", PlayersRow);
-            RestAHandOverTheLeftSensor();
+            HoldASteadyLeanOverTheHeightSensors();
 
             MenuFrame();
 
-            // As above: the opening lean spends one step of its own. Put the row back on
-            // 1 ИГРОК and ask the stick for 2 ИГРОКА with the lean still held.
+            // As above: the first sight of the lean spends one step of its own. Put the row
+            // back on 1 ИГРОК and ask the stick for 2 ИГРОКА with the lean still held.
             Set(_menu, "_selectedPlayers", 1);
             MirrorUpdateVisualsPlayerRight();
             TapStickRight();
 
             Assert.AreEqual(2, Players(),
-                "Джойстик не переключает строку ИГРОКИ, пока рука лежит над датчиком высоты — " +
-                "«2 ИГРОКА» недостижимы. Причина та же, что у соседнего теста про ТРЕНИРОВКУ.");
+                "Джойстик не переключает строку ИГРОКИ, пока руки держат наклон над " +
+                "датчиками — «2 ИГРОКА» недостижимы. Причина та же, что у соседнего теста " +
+                "про ТРЕНИРОВКУ.");
         }
 
         /// <summary>
-        /// The lean the cabinet leaves us in must cost exactly one step, not a step every
-        /// frame: the de-bounce has to survive being split in two.
+        /// A lean that is held must cost exactly one step, not a step every frame: the
+        /// de-bounce has to survive being split in two.
         /// </summary>
         [Test]
         public void AHeldSensorLean_StillCountsOnce_NotEveryFrame()
         {
             Set(_menu, "_row", LanesRow);
-            RestAHandOverTheLeftSensor();
+            HoldASteadyLeanOverTheHeightSensors();
 
             MenuFrame();
             int afterFirstFrame = (int)Get(_menu, "_selectedLanes");
@@ -568,12 +567,14 @@ namespace LadyBug.Tests
         }
 
         /// <summary>
-        /// The pose the arcade hub hands this game over in: one hand over the left height
-        /// sensor (normalized 1 = hand right at it), nothing over the right one.
+        /// Both hands over the height sensors in a lean and left there: one hand down at the
+        /// sensor, the other raised but still inside the band the sensors can see. It is a
+        /// perfectly ordinary way to stand at the cabinet, and — crucially — it is a gesture
+        /// that is HELD, with no frame in which it lets go.
         /// </summary>
-        private static void RestAHandOverTheLeftSensor()
+        private static void HoldASteadyLeanOverTheHeightSensors()
         {
-            ArcadeLauncherStub.SetHeights(1f, 0f);
+            ArcadeLauncherStub.SetHeights(1f, 0.1f);
         }
 
         private int Row()
