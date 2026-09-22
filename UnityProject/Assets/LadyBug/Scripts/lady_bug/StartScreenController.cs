@@ -1077,12 +1077,14 @@ public class StartScreenController : MonoBehaviour
         if (menuMusic != null)
             menuMusic.StopRotating();
 
-        // Repack: FindFirstObjectByType, not the obsolete FindObjectOfType (CS0618
-        // in Unity 6 — the cabinet build is kept warning-clean). Include inactive:
-        // the loader's controller lives on its own object, but the search must not
-        // depend on that staying true.
+        // Repack: FindAnyObjectByType, not the obsolete FindObjectOfType the author
+        // wrote — and not FindFirstObjectByType either, which is deprecated in its
+        // own turn on this editor (both are CS0618, and the cabinet build is kept
+        // warning-clean). There is exactly one loader in the scene, so "any" and
+        // "first" are the same object. Include inactive: the loader's controller
+        // lives on its own object, but the search must not depend on that.
         LoaderScreenController loader =
-            FindFirstObjectByType<LoaderScreenController>(FindObjectsInactive.Include);
+            FindAnyObjectByType<LoaderScreenController>(FindObjectsInactive.Include);
         if (loader != null)
             loader.ReturnToLoader();
     }
